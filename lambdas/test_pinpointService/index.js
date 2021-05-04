@@ -2,7 +2,7 @@
 
 const AWS = require('aws-sdk');
 
-const aws_region = 'us-east-1';
+const awsRegion = 'us-east-1';
 const originationNumber = '+19738335877';
 
 // const destinationNumber = "+13343322730"; // Bidese
@@ -11,8 +11,8 @@ const destinationNumber = '+491624533572'; // Julio
 const languageCode = 'en-US';
 const voiceId = 'Matthew';
 
-//Create a new Pinpoint object.
-const pinpointsmsvoice = new AWS.PinpointSMSVoice({ region: aws_region });
+// Create a new Pinpoint object.
+const pinpointsmsvoice = new AWS.PinpointSMSVoice({ region: awsRegion });
 
 // const voiceMessage = "<speak>"
 //   + "Hello, an alarm triggered"
@@ -40,7 +40,7 @@ const voiceMessage =
   'and check the alarm pending.' +
   '</speak>';
 
-//Try to send the message.
+// Try to send the message.
 const sendVoiceMessage = (message, number) => {
   console.log('originationNumber', originationNumber);
   console.log('destinationNumber', number);
@@ -57,18 +57,18 @@ const sendVoiceMessage = (message, number) => {
     OriginationPhoneNumber: originationNumber,
   };
 
-  pinpointsmsvoice.sendVoiceMessage(params, function (err, data) {
+  pinpointsmsvoice.sendVoiceMessage(params, (err, data) => {
     // If something goes wrong, print an error message.
     if (err) {
       console.log(err.message);
       // Otherwise, show the unique ID for the message.
     } else {
-      console.log('Message sent! Message ID: ' + data['MessageId']);
+      console.log(`Message sent! Message ID: ${data.MessageId}`);
     }
   });
 };
 
-exports.handler = (event, context, callback) => {
+exports.handler = (event) => {
   console.log('Received event:', event);
   sendVoiceMessage(voiceMessage, destinationNumber);
 };

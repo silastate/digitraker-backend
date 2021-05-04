@@ -1,3 +1,5 @@
+'use strict';
+
 const AWS = require('aws-sdk');
 
 AWS.config.update({ region: 'us-east-2' });
@@ -7,35 +9,37 @@ const sns = new AWS.SNS({ apiVersion: '2010-03-31' });
 
 const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
 
-function formatDate(d) {
-  d = parseInt(d);
-  date = new Date(d);
-  let dd = date.getDate();
-  let mm = date.getMonth() + 1;
-  let yyyy = date.getFullYear();
-  let HH = date.getHours();
-  let MM = date.getMinutes();
-  let ampm = 'am';
-  if (HH > 11) {
-    ampm = 'pm';
-  }
-  if (HH > 12) {
-    HH = HH - 12;
-  }
-  if (dd < 10) {
-    dd = '0' + dd;
-  }
-  if (mm < 10) {
-    mm = '0' + mm;
-  }
-  if (HH < 10) {
-    HH = '0' + HH;
-  }
-  if (MM < 10) {
-    MM = '0' + MM;
-  }
-  return HH + ':' + MM + ' ' + ampm + ' ' + mm + '-' + dd;
-}
+// function formatDate(d) {
+//   d = parseInt(d, 10);
+//   const date = new Date(d);
+
+//   let dd = date.getDate();
+//   let mm = date.getMonth() + 1;
+//   let HH = date.getHours();
+//   let MM = date.getMinutes();
+
+//   let ampm = 'am';
+
+//   if (HH > 11) {
+//     ampm = 'pm';
+//   }
+//   if (HH > 12) {
+//     HH -= 12;
+//   }
+//   if (dd < 10) {
+//     dd = `0${dd}`;
+//   }
+//   if (mm < 10) {
+//     mm = `0${mm}`;
+//   }
+//   if (HH < 10) {
+//     HH = `0${HH}`;
+//   }
+//   if (MM < 10) {
+//     MM = `0${MM}`;
+//   }
+//   return `${HH}:${MM} ${ampm} ${mm}-${dd}`;
+// }
 
 const recursiveScan = (params, aItems = []) => {
   return dynamo
@@ -43,7 +47,7 @@ const recursiveScan = (params, aItems = []) => {
     .promise()
     .then((data) => {
       //  Simple Changes to input, optional
-      let newItems = data.Items.map((item) => {
+      const newItems = data.Items.map((item) => {
         return item;
       });
 
@@ -79,8 +83,8 @@ const handleTimeout = (sensor, timeoutEscalation, alarms) => {
   const actionsToTake = [];
   const sensorMessagesToWrite = [];
 
-  const delay = parseInt(timeoutEscalation.delay.N) * 60 * 1000; // delay in ms
-  const lastHB = parseInt(sensor.lastHeartbeat.N);
+  const delay = parseInt(timeoutEscalation.delay.N, 10) * 60 * 1000; // delay in ms
+  const lastHB = parseInt(sensor.lastHeartbeat.N, 10);
 
   if (timeoutAlarms.length === 0 && lastHB + delay < Date.now()) {
     alarmMessagesToWrite.push({
@@ -112,7 +116,7 @@ const handleTimeout = (sensor, timeoutEscalation, alarms) => {
     });
 
     actionsToTake.push({
-      sensor: sensor,
+      sensor,
       actions: timeoutActions,
       alarm: {
         alarmType: {
@@ -136,8 +140,8 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
   const sensorMessagesToWrite = [];
   const actionsToTake = [];
 
-  const lastEscalationAt = parseInt(alarm.lastEscalation.N);
-  const currentOrder = parseInt(alarm.escalation.N);
+  const lastEscalationAt = parseInt(alarm.lastEscalation.N, 10);
+  const currentOrder = parseInt(alarm.escalation.N, 10);
   const nextOrder = (currentOrder + 1).toString();
   const nextEscalation = escalations.find((e) => e.order.N === nextOrder);
   let currentEscalation = escalations.find((e) => e.order.N === currentOrder.toString());
@@ -155,7 +159,7 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
     currentEscalation = nextEscalation;
   }
 
-  const delay = !currentEscalation ? Date.now() : parseInt(currentEscalation.delay.N) * 60 * 1000;
+  const delay = !currentEscalation ? Date.now() : parseInt(currentEscalation.delay.N, 10) * 60 * 1000;
 
   if (lastEscalationAt + delay < Date.now()) {
     // increase escalation take actions
@@ -186,7 +190,7 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
     const alarmActions = !currentEscalation ? [] : currentEscalation.actions.L.map((action) => action.M);
 
     actionsToTake.push({
-      sensor: sensor,
+      sensor,
       actions: alarmActions,
       alarm,
     });
@@ -199,7 +203,7 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
   };
 };
 
-exports.handler = async (event) => {
+exports.handler = async () => {
   let sensors = await recursiveScan({
     TableName: 'Sensors',
     FilterExpression: 'attribute_exists(clientId)',
@@ -208,6 +212,7 @@ exports.handler = async (event) => {
   sensors = sensors.filter((s) => {
     if (!Object.keys(s).includes('deleted')) return true;
     if (s.deleted.BOOL !== true) return true;
+    return false;
   });
 
   const alarms = await recursiveScan({
@@ -263,6 +268,7 @@ exports.handler = async (event) => {
         escalations = escalations.filter((e) => {
           if (!Object.keys(e).includes('deleted')) return true;
           if (e.deleted.BOOL !== true) return true;
+          return false;
         });
 
         // --- Verify if need to create a new timeout alarm
@@ -279,7 +285,7 @@ exports.handler = async (event) => {
         // --- Verify if need to create new alarms
         const alarmsOn = alarms.filter((a) => a.txid.S === sensor.txid.S);
 
-        await alarmsOn.map((alarm) => {
+        await alarmsOn.forEach((alarm) => {
           const alarmMessagesAndActions = handleAlarms(sensor, escalations, alarm);
 
           sensorMessagesToWrite = [...alarmMessagesAndActions.sensorMessagesToWrite, ...sensorMessagesToWrite];
@@ -299,7 +305,7 @@ exports.handler = async (event) => {
     return {
       sensor: unit.sensor,
       alarm: unit.alarm,
-      actions: actions,
+      actions,
       contacts: contactList,
     };
   });
@@ -319,7 +325,7 @@ exports.handler = async (event) => {
     }
 
     let value = parseFloat(unit.sensor.heartbeat.N);
-    let pressure = unit.sensor.pressure ? unit.sensor.pressure.BOOL : false;
+    const pressure = unit.sensor.pressure ? unit.sensor.pressure.BOOL : false;
 
     switch (unit.sensor.unit ? unit.sensor.unit.S : '') {
       case 'F':
@@ -331,16 +337,16 @@ exports.handler = async (event) => {
         break;
       case 'WC':
         if (pressure && value !== -9999) {
-          let coef = parseFloat(unit.sensor.coef.N);
+          const coef = parseFloat(unit.sensor.coef.N);
           value = 0.015625 * (value - 4) + coef; // positive equation
           if (!unit.sensor.positive.BOOL) {
             // use negative equation
-            value = value - 0.125;
+            value -= 0.125;
           }
         }
         break; // add equation to compute correct wc
       default:
-        console.log(txid + ' doesnt have unit configuration');
+        console.log(`${unit.sensor.txid.S} doesnt have unit configuration`);
     }
     const emailMessage = {
       Destination: {
@@ -377,7 +383,7 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
     emailList = [emailMessage, ...emailList];
   });
 
-  console.log('EMAIL LIST ' + JSON.stringify(emailList, null, 2));
+  console.log(`EMAIL LIST ${JSON.stringify(emailList, null, 2)}`);
 
   await Promise.all(
     emailList.map(async (email) => {
@@ -392,25 +398,25 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
     return {
       sensor: unit.sensor,
       alarm: unit.alarm,
-      actions: actions,
+      actions,
       contacts: contactList,
     };
   });
 
-  let smsList = [];
+  const smsList = [];
   smsActions.forEach((unit) => {
-    //#########################################
-    //##### used for sms testing ONLY #########
-    //#########################################
+    // #########################################
+    // ##### used for sms testing ONLY #########
+    // #########################################
 
-    let sendOnlyTo = ['HealthCare', 'Auburn', 'Aurora'];
-    let clientId = unit.sensor.clientId.S;
+    const sendOnlyTo = ['HealthCare', 'Auburn', 'Aurora'];
+    const clientId = unit.sensor.clientId.S;
     if (!sendOnlyTo.includes(clientId)) {
       return;
     }
 
-    //#########################################
-    //#########################################
+    // #########################################
+    // #########################################
 
     unit.contacts.forEach((contact) => {
       let alarmType = 'out of range';
@@ -423,7 +429,7 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
       }
 
       let value = parseFloat(unit.sensor.heartbeat.N);
-      let pressure = unit.sensor.pressure ? unit.sensor.pressure.BOOL : false;
+      const pressure = unit.sensor.pressure ? unit.sensor.pressure.BOOL : false;
 
       switch (unit.sensor.unit ? unit.sensor.unit.S : '') {
         case 'F':
@@ -435,19 +441,19 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
           break;
         case 'WC':
           if (pressure && value !== -9999) {
-            let coef = parseFloat(unit.sensor.coef.N);
+            const coef = parseFloat(unit.sensor.coef.N);
             value = 0.015625 * (value - 4) + coef; // positive equation
             if (!unit.sensor.positive.BOOL) {
               // use negative equation
-              value = value - 0.125;
+              value -= 0.125;
             }
           }
           break; // add equation to compute correct wc
         default:
-          console.log(txid + ' doesnt have unit configuration');
+          console.log(`${unit.sensor.txid.S} doesnt have unit configuration`);
       }
 
-      let formatedCreatedAt = formatDate(unit.alarm.createdAt.N);
+      // const formatedCreatedAt = formatDate(unit.alarm.createdAt.N);
 
       smsList.push({
         Message: `Sensor: ${unit.sensor.name.S} (${unit.sensor.txid.S})
@@ -474,7 +480,7 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
   if (alarmMessagesToWrite.length > 0) {
     // console.log('alarmMessagesToWrite', alarmMessagesToWrite);
 
-    for (let i = 0; i < alarmMessagesToWrite.length; i = i + 25) {
+    for (let i = 0; i < alarmMessagesToWrite.length; i += 25) {
       const params = {
         RequestItems: {
           Alarms: alarmMessagesToWrite.slice(i, i + 25),
@@ -483,7 +489,7 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
 
       console.log('alarmMessagesToWrite - Params', params);
       await dynamo
-        .batchWriteItem(params, function (err, data) {
+        .batchWriteItem(params, (err, data) => {
           if (err) {
             console.log('alarmMessagesToWrite - Error', err);
           } else {
@@ -497,7 +503,7 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
   if (sensorMessagesToWrite.length > 0) {
     console.log('sensorMessagesToWrite', sensorMessagesToWrite);
 
-    for (let i = 0; i < sensorMessagesToWrite.length; i = i + 25) {
+    for (let i = 0; i < sensorMessagesToWrite.length; i += 25) {
       const params = {
         RequestItems: {
           Sensors: sensorMessagesToWrite.slice(i, i + 25),
@@ -506,7 +512,7 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
 
       console.log('sensorMessagesToWrite - Params', params);
       await dynamo
-        .batchWriteItem(params, function (err, data) {
+        .batchWriteItem(params, (err, data) => {
           if (err) {
             console.log('sensorMessagesToWrite - Error ', err);
           } else {

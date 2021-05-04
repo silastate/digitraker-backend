@@ -1,16 +1,19 @@
-var AWS = require('aws-sdk');
-var pinpoint = new AWS.Pinpoint({ region: process.env.region });
+'use strict';
+
+const AWS = require('aws-sdk');
+
+const pinpoint = new AWS.Pinpoint({ region: process.env.region });
 
 // Make sure the SMS channel is enabled for the projectId that you specify.
 // See: https://docs.aws.amazon.com/pinpoint/latest/userguide/channels-sms-setup.html
-var projectId = process.env.projectId;
+const projectId = process.env.projectId;
 
 // You need a dedicated long code in order to use two-way SMS.
 // See: https://docs.aws.amazon.com/pinpoint/latest/userguide/channels-voice-manage.html#channels-voice-manage-request-phone-numbers
-var originationNumber = process.env.originationNumber;
+const originationNumber = process.env.originationNumber;
 
 // This message is spread across multiple lines for improved readability.
-var message =
+const message =
   '<speak>' +
   'Bom dia <emphasis>Bidese</emphasis>' +
   "using the <break strength='weak'/>AWS SDK for JavaScript in Node.js. " +
@@ -19,31 +22,31 @@ var message =
   'Vai <emphasis>dormir</emphasis>' +
   '</speak>';
 
-var messageType = 'TRANSACTIONAL';
+const messageType = 'TRANSACTIONAL';
 
-exports.handler = (event, context, callback) => {
+exports.handler = (event) => {
   console.log('Received event:', event);
   validateNumber(event);
 };
 
 function validateNumber(event) {
-  var destinationNumber = event.destinationNumber;
-  if (destinationNumber.length == 10) {
-    destinationNumber = '+1' + destinationNumber;
+  let destinationNumber = event.destinationNumber;
+  if (destinationNumber.length === 10) {
+    destinationNumber = `+1${destinationNumber}`;
   }
-  var params = {
+  const params = {
     NumberValidateRequest: {
       IsoCountryCode: 'US',
       PhoneNumber: destinationNumber,
     },
   };
-  pinpoint.phoneNumberValidate(params, function (err, data) {
+  pinpoint.phoneNumberValidate(params, (err, data) => {
     if (err) {
       console.log(err, err.stack);
     } else {
       console.log(data);
-      //return data;
-      if (data['NumberValidateResponse']['PhoneTypeCode'] == 0) {
+      // return data;
+      if (data.NumberValidateResponse.PhoneTypeCode == 0) {
         createEndpoint(data, event.firstName, event.lastName, event.source);
       } else {
         console.log("Received a phone number that isn't capable of receiving " + 'SMS messages. No endpoint created.');
@@ -53,10 +56,10 @@ function validateNumber(event) {
 }
 
 function createEndpoint(data, firstName, lastName, source) {
-  var destinationNumber = data['NumberValidateResponse']['CleansedPhoneNumberE164'];
-  var endpointId = data['NumberValidateResponse']['CleansedPhoneNumberE164'].substring(1);
+  const destinationNumber = data.NumberValidateResponse.CleansedPhoneNumberE164;
+  const endpointId = data.NumberValidateResponse.CleansedPhoneNumberE164.substring(1);
 
-  var params = {
+  const params = {
     ApplicationId: projectId,
     // The Endpoint ID is equal to the cleansed phone number minus the leading
     // plus sign. This makes it easier to easily update the endpoint later.
@@ -70,12 +73,12 @@ function createEndpoint(data, firstName, lastName, source) {
       // value to NONE (not opted out).
       OptOut: 'ALL',
       Location: {
-        PostalCode: data['NumberValidateResponse']['ZipCode'],
-        City: data['NumberValidateResponse']['City'],
-        Country: data['NumberValidateResponse']['CountryCodeIso2'],
+        PostalCode: data.NumberValidateResponse.ZipCode,
+        City: data.NumberValidateResponse.City,
+        Country: data.NumberValidateResponse.CountryCodeIso2,
       },
       Demographic: {
-        Timezone: data['NumberValidateResponse']['Timezone'],
+        Timezone: data.NumberValidateResponse.Timezone,
       },
       Attributes: {
         Source: [source],
@@ -88,19 +91,19 @@ function createEndpoint(data, firstName, lastName, source) {
       },
     },
   };
-  pinpoint.updateEndpoint(params, function (err, data) {
+  pinpoint.updateEndpoint(params, (err, data) => {
     if (err) {
       console.log(err, err.stack);
     } else {
       console.log(data);
-      //return data;
+      // return data;
       sendConfirmation(destinationNumber);
     }
   });
 }
 
 function sendConfirmation(destinationNumber) {
-  var params = {
+  const params = {
     ApplicationId: projectId,
     MessageRequest: {
       Addresses: {
@@ -118,13 +121,13 @@ function sendConfirmation(destinationNumber) {
     },
   };
 
-  pinpoint.sendMessages(params, function (err, data) {
+  pinpoint.sendMessages(params, (err, data) => {
     // If something goes wrong, print an error message.
     if (err) {
       console.log(err.message);
       // Otherwise, show the unique ID for the message.
     } else {
-      console.log('Message sent! ' + data['MessageResponse']['Result'][destinationNumber]['StatusMessage']);
+      console.log(`Message sent! ${data.MessageResponse.Result[destinationNumber].StatusMessage}`);
     }
   });
 }

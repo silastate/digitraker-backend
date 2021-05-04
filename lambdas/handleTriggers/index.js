@@ -3,40 +3,38 @@ const AWS = require('aws-sdk');
 AWS.config.update({ region: 'us-east-2' });
 
 const ses = new AWS.SES({ region: 'us-east-2' });
-const sns = new AWS.SNS({apiVersion: '2010-03-31'})
+const sns = new AWS.SNS({ apiVersion: '2010-03-31' });
 
 const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
 
-
-function formatDate(d)
- {
-  d = parseInt(d)
-  date = new Date(d)
-  let dd = date.getDate(); 
-  let mm = date.getMonth()+1;
+function formatDate(d) {
+  d = parseInt(d);
+  date = new Date(d);
+  let dd = date.getDate();
+  let mm = date.getMonth() + 1;
   let yyyy = date.getFullYear();
   let HH = date.getHours();
-  let MM =  date.getMinutes();
-  let ampm = "am";
-  if(HH>11){
-    ampm = "pm"
+  let MM = date.getMinutes();
+  let ampm = 'am';
+  if (HH > 11) {
+    ampm = 'pm';
   }
-  if(HH>12){
+  if (HH > 12) {
     HH = HH - 12;
   }
-  if(dd<10){
+  if (dd < 10) {
     dd = '0' + dd;
-  } 
-  if(mm<10){
+  }
+  if (mm < 10) {
     mm = '0' + mm;
   }
-  if(HH<10){
+  if (HH < 10) {
     HH = '0' + HH;
   }
-  if(MM<10){
+  if (MM < 10) {
     MM = '0' + MM;
   }
-  return HH+":"+MM+" "+ampm+" "+mm+'-'+dd
+  return HH + ':' + MM + ' ' + ampm + ' ' + mm + '-' + dd;
 }
 
 const recursiveScan = (params, aItems = []) => {
@@ -75,9 +73,7 @@ const handleTimeout = (sensor, timeoutEscalation, alarms) => {
   // console.log("HANDLETIMEOUT", sensor.txid.S)
 
   const timeoutActions = timeoutEscalation.actions.L.map((action) => action.M);
-  const timeoutAlarms = alarms.filter(
-    (a) => a.txid.S === sensor.txid.S && a.alarmType.S === 'timeout'
-  );
+  const timeoutAlarms = alarms.filter((a) => a.txid.S === sensor.txid.S && a.alarmType.S === 'timeout');
 
   const alarmMessagesToWrite = [];
   const actionsToTake = [];
@@ -187,9 +183,7 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
       },
     });
 
-    const alarmActions = !currentEscalation
-      ? []
-      : currentEscalation.actions.L.map((action) => action.M);
+    const alarmActions = !currentEscalation ? [] : currentEscalation.actions.L.map((action) => action.M);
 
     actionsToTake.push({
       sensor: sensor,
@@ -211,14 +205,12 @@ exports.handler = async (event) => {
     FilterExpression: 'attribute_exists(clientId)',
   });
 
-  sensors = sensors.filter(s => {
-    if(!Object.keys(s).includes("deleted"))
-      return true; 
-    if(s.deleted.BOOL !== true)
-      return true;
-    })
+  sensors = sensors.filter((s) => {
+    if (!Object.keys(s).includes('deleted')) return true;
+    if (s.deleted.BOOL !== true) return true;
+  });
 
-    const alarms = await recursiveScan({
+  const alarms = await recursiveScan({
     TableName: 'Alarms',
     FilterExpression: 'alarmOn = :o',
     ExpressionAttributeValues: {
@@ -242,13 +234,13 @@ exports.handler = async (event) => {
   // const olathelab = sensors.filter((s) => s.clientId.S === 'OlatheLab');
 
   // sensors = [
-    // ... auburn,
-    // ... healthcare,
-    // ... aurora,
-    // ... dallas,
-    // ... ellsworth,
-    // ... olathelab
-    // ];
+  // ... auburn,
+  // ... healthcare,
+  // ... aurora,
+  // ... dallas,
+  // ... ellsworth,
+  // ... olathelab
+  // ];
 
   // console.log(sensors)
 
@@ -268,12 +260,10 @@ exports.handler = async (event) => {
           .promise();
 
         escalations = escalations.Items;
-        escalations = escalations.filter(e => {
-          if(!Object.keys(e).includes("deleted"))
-            return true; 
-          if(e.deleted.BOOL !== true)
-            return true;
-          })
+        escalations = escalations.filter((e) => {
+          if (!Object.keys(e).includes('deleted')) return true;
+          if (e.deleted.BOOL !== true) return true;
+        });
 
         // --- Verify if need to create a new timeout alarm
         const timeoutEscalation = escalations.find((e) => e.order.N === '-1');
@@ -281,14 +271,8 @@ exports.handler = async (event) => {
         if (timeoutEscalation) {
           const timeoutMessageAndActions = handleTimeout(sensor, timeoutEscalation, alarms);
 
-          sensorMessagesToWrite = [
-            ...timeoutMessageAndActions.sensorMessagesToWrite,
-            ...sensorMessagesToWrite,
-          ];
-          alarmMessagesToWrite = [
-            ...timeoutMessageAndActions.alarmMessagesToWrite,
-            ...alarmMessagesToWrite,
-          ];
+          sensorMessagesToWrite = [...timeoutMessageAndActions.sensorMessagesToWrite, ...sensorMessagesToWrite];
+          alarmMessagesToWrite = [...timeoutMessageAndActions.alarmMessagesToWrite, ...alarmMessagesToWrite];
           actionsToTake = [...timeoutMessageAndActions.actionsToTake, ...actionsToTake];
         }
 
@@ -298,18 +282,12 @@ exports.handler = async (event) => {
         await alarmsOn.map((alarm) => {
           const alarmMessagesAndActions = handleAlarms(sensor, escalations, alarm);
 
-          sensorMessagesToWrite = [
-            ...alarmMessagesAndActions.sensorMessagesToWrite,
-            ...sensorMessagesToWrite,
-          ];
-          alarmMessagesToWrite = [
-            ...alarmMessagesAndActions.alarmMessagesToWrite,
-            ...alarmMessagesToWrite,
-          ];
+          sensorMessagesToWrite = [...alarmMessagesAndActions.sensorMessagesToWrite, ...sensorMessagesToWrite];
+          alarmMessagesToWrite = [...alarmMessagesAndActions.alarmMessagesToWrite, ...alarmMessagesToWrite];
           actionsToTake = [...alarmMessagesAndActions.actionsToTake, ...actionsToTake];
         });
       }
-    })
+    }),
   );
 
   console.log('actionsToTake', JSON.stringify(actionsToTake, null, 2));
@@ -330,37 +308,43 @@ exports.handler = async (event) => {
   // console.log(emailActions);
   emailActions.forEach((unit) => {
     // console.log(unit.sensor.txid.S, unit.alarm.alarmType.S, action.contact.S)
-  
+
     let alarmType = 'out of range';
     switch (unit.alarm.alarmType.S) {
       case 'outRange':
         alarmType = 'out of range';
         break;
-        default:
-          alarmType = unit.alarm.alarmType.S;
-        }
-        
+      default:
+        alarmType = unit.alarm.alarmType.S;
+    }
+
     let value = parseFloat(unit.sensor.heartbeat.N);
-    let pressure = unit.sensor.pressure? unit.sensor.pressure.BOOL : false;
-    
-    switch (unit.sensor.unit ? unit.sensor.unit.S : "") {
-      case "F" : break;
-      case "C" : value = (value - 32) * 5 / 9; break;
-      case "%" : break;
-      case "WC": if (pressure && value !== -9999) {
-          let coef = parseFloat(unit.sensor.coef.N)
+    let pressure = unit.sensor.pressure ? unit.sensor.pressure.BOOL : false;
+
+    switch (unit.sensor.unit ? unit.sensor.unit.S : '') {
+      case 'F':
+        break;
+      case 'C':
+        value = ((value - 32) * 5) / 9;
+        break;
+      case '%':
+        break;
+      case 'WC':
+        if (pressure && value !== -9999) {
+          let coef = parseFloat(unit.sensor.coef.N);
           value = 0.015625 * (value - 4) + coef; // positive equation
           if (!unit.sensor.positive.BOOL) {
-              // use negative equation
-              value = value - 0.125;
+            // use negative equation
+            value = value - 0.125;
           }
-      }
-          break; // add equation to compute correct wc
-      default: console.log(txid + " doesnt have unit configuration")
-  }
+        }
+        break; // add equation to compute correct wc
+      default:
+        console.log(txid + ' doesnt have unit configuration');
+    }
     const emailMessage = {
       Destination: {
-        ToAddresses: ['digitraker@gmail.com',  ...unit.contacts], 
+        ToAddresses: ['digitraker@gmail.com', ...unit.contacts],
       },
       Message: {
         Body: {
@@ -371,7 +355,7 @@ exports.handler = async (event) => {
               unit.sensor.clientId.S
             }). You can view the sensor by going to http://app.digitraker.com/dashboard/${unit.sensor.location.S.replace(
               / /g,
-              '%20'
+              '%20',
             )}/${
               unit.sensor.txid.S
             } and check the alarm pending. \n\nIf you have any concerns, you can reach out to us at http://www.digitraker.com.\n
@@ -393,9 +377,13 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
     emailList = [emailMessage, ...emailList];
   });
 
-  console.log("EMAIL LIST " + JSON.stringify(emailList, null, 2))
+  console.log('EMAIL LIST ' + JSON.stringify(emailList, null, 2));
 
-  await Promise.all(emailList.map(async email => { await ses.sendEmail(email).promise(); }));
+  await Promise.all(
+    emailList.map(async (email) => {
+      await ses.sendEmail(email).promise();
+    }),
+  );
 
   const smsActions = await actionsToTake.map((unit) => {
     let actions = unit.actions.filter((a) => a.type.S === 'sms');
@@ -409,24 +397,22 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
     };
   });
 
-  let smsList = []
-  smsActions.forEach((unit)=> {
-
+  let smsList = [];
+  smsActions.forEach((unit) => {
     //#########################################
     //##### used for sms testing ONLY #########
     //#########################################
-    
-    let sendOnlyTo = ['HealthCare', 'Auburn', 'Aurora']
+
+    let sendOnlyTo = ['HealthCare', 'Auburn', 'Aurora'];
     let clientId = unit.sensor.clientId.S;
-    if(!sendOnlyTo.includes(clientId)){
+    if (!sendOnlyTo.includes(clientId)) {
       return;
     }
 
     //#########################################
     //#########################################
-    
-    (unit.contacts).forEach((contact) => {
-      
+
+    unit.contacts.forEach((contact) => {
       let alarmType = 'out of range';
       switch (unit.alarm.alarmType.S) {
         case 'outRange':
@@ -437,23 +423,29 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
       }
 
       let value = parseFloat(unit.sensor.heartbeat.N);
-      let pressure = unit.sensor.pressure? unit.sensor.pressure.BOOL : false;
+      let pressure = unit.sensor.pressure ? unit.sensor.pressure.BOOL : false;
 
-      switch (unit.sensor.unit ? unit.sensor.unit.S : "") {
-        case "F" : break;
-        case "C" : value = (value - 32) * 5 / 9; break;
-        case "%" : break;
-        case "WC": if (pressure && value !== -9999) {
-            let coef = parseFloat(unit.sensor.coef.N)
+      switch (unit.sensor.unit ? unit.sensor.unit.S : '') {
+        case 'F':
+          break;
+        case 'C':
+          value = ((value - 32) * 5) / 9;
+          break;
+        case '%':
+          break;
+        case 'WC':
+          if (pressure && value !== -9999) {
+            let coef = parseFloat(unit.sensor.coef.N);
             value = 0.015625 * (value - 4) + coef; // positive equation
             if (!unit.sensor.positive.BOOL) {
-                // use negative equation
-                value = value - 0.125;
+              // use negative equation
+              value = value - 0.125;
             }
-        }
-            break; // add equation to compute correct wc
-        default: console.log(txid + " doesnt have unit configuration")
-    }
+          }
+          break; // add equation to compute correct wc
+        default:
+          console.log(txid + ' doesnt have unit configuration');
+      }
 
       let formatedCreatedAt = formatDate(unit.alarm.createdAt.N);
 
@@ -466,12 +458,16 @@ Range Max: ${unit.sensor.rangeMax.N}${unit.sensor.unit.S}
 Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
         PhoneNumber: contact,
       });
-    })
-  })
+    });
+  });
 
-  console.log("smsList", JSON.stringify(smsList, null, 2))
+  console.log('smsList', JSON.stringify(smsList, null, 2));
 
-  await Promise.all(smsList.map(async sms => { await sns.publish(sms).promise();}));
+  await Promise.all(
+    smsList.map(async (sms) => {
+      await sns.publish(sms).promise();
+    }),
+  );
 
   // console.log("MESSAGES TO WRITE " + JSON.stringify(alarmMessagesToWrite, null, 2))
 

@@ -1,15 +1,15 @@
-'use strict'
+'use strict';
 
 const AWS = require('aws-sdk');
 
-const aws_region = process.env.region;
-const originationNumber = process.env.originationNumber;
+const aws_region = 'us-east-1';
+const originationNumber = '+19738335877';
 
 // const destinationNumber = "+13343322730"; // Bidese
-const destinationNumber = "+491624533572"; // Julio
+const destinationNumber = '+491624533572'; // Julio
 
-const languageCode = "en-US";
-const voiceId = "Matthew";
+const languageCode = 'en-US';
+const voiceId = 'Matthew';
 
 //Create a new Pinpoint object.
 const pinpointsmsvoice = new AWS.PinpointSMSVoice({ region: aws_region });
@@ -24,45 +24,49 @@ const pinpointsmsvoice = new AWS.PinpointSMSVoice({ region: aws_region });
 //   + "Last Value: <emphasis>35°</emphasis>,"
 //   + "</speak>";
 
-const voiceMessage = "<speak>"
-  + "Hello, this is a message from Digitraker system,"
-  + "the Sensor <break time='0.5s'/> <emphasis>Kitchen</emphasis>, ID <break time='0.5s'/> <emphasis>1234567_0</emphasis>,"
-  + "located at <break time='0.5s'/> <emphasis>Main Floor</emphasis>, in the Gateway <emphasis>Auburn</emphasis>,"
-  + "has an <break time='0.5s'/><emphasis>outRange</emphasis> alarm."
-  + "You can view the sensor by going to the <break time='0.5s'/>app<break time='0.5s'/>.<break time='0.5s'/>digitraker<break time='0.5s'/>.<break time='0.5s'/>com <break time='0.5s'/>and check the alarm pending."
-  + "</speak>";
-
-
+const voiceMessage =
+  '<speak>' +
+  'Hello, this is a message from Digitracker, you have an outRange alarm at the Sensor Kitchen, located at Main Floor.' +
+  'You can view the sensor by going to the <break time="0.2s" />' +
+  'app' +
+  '<break time="0.2s" />' +
+  'dot' +
+  '<break time="0.2s" />' +
+  'digitracker' +
+  '<break time="0.2s" />' +
+  'dot' +
+  '<break time="0.2s" />' +
+  'com <break time="0.2s" />' +
+  'and check the alarm pending.' +
+  '</speak>';
 
 //Try to send the message.
 const sendVoiceMessage = (message, number) => {
   console.log('originationNumber', originationNumber);
   console.log('destinationNumber', number);
-  
+
   const params = {
     Content: {
       SSMLMessage: {
         LanguageCode: languageCode,
         Text: message,
-        VoiceId: voiceId
-      }
+        VoiceId: voiceId,
+      },
     },
     DestinationPhoneNumber: number,
-    OriginationPhoneNumber: originationNumber
+    OriginationPhoneNumber: originationNumber,
   };
 
-  pinpointsmsvoice.sendVoiceMessage(params, function(err, data) {
+  pinpointsmsvoice.sendVoiceMessage(params, function (err, data) {
     // If something goes wrong, print an error message.
-    if(err) {
+    if (err) {
       console.log(err.message);
-    // Otherwise, show the unique ID for the message.
+      // Otherwise, show the unique ID for the message.
     } else {
-      console.log("Message sent! Message ID: " + data['MessageId']);
+      console.log('Message sent! Message ID: ' + data['MessageId']);
     }
   });
-} 
-
-
+};
 
 exports.handler = (event, context, callback) => {
   console.log('Received event:', event);

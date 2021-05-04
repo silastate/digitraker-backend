@@ -9,37 +9,35 @@ const sns = new AWS.SNS({ apiVersion: '2010-03-31' });
 
 const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
 
-// function formatDate(d) {
-//   d = parseInt(d, 10);
-//   const date = new Date(d);
+// Init Pinpoint Service
+const pinpointConfig = {
+  region: 'us-east-1',
+  originationNumber: '+19738335877',
+  language: 'en-US',
+  voiceId: 'Salli',
+};
+const pinpointSmsVoice = new AWS.PinpointSMSVoice({ region: pinpointConfig.region });
 
-//   let dd = date.getDate();
-//   let mm = date.getMonth() + 1;
-//   let HH = date.getHours();
-//   let MM = date.getMinutes();
+// Send Pinpoint Voice Message
+const sendVoiceMessage = async (message, phoneNumber) => {
+  const params = {
+    Content: {
+      SSMLMessage: {
+        LanguageCode: pinpointConfig.language,
+        Text: message,
+        VoiceId: pinpointConfig.voiceId,
+      },
+    },
+    DestinationPhoneNumber: phoneNumber,
+    OriginationPhoneNumber: pinpointConfig.originationNumber,
+  };
 
-//   let ampm = 'am';
-
-//   if (HH > 11) {
-//     ampm = 'pm';
-//   }
-//   if (HH > 12) {
-//     HH -= 12;
-//   }
-//   if (dd < 10) {
-//     dd = `0${dd}`;
-//   }
-//   if (mm < 10) {
-//     mm = `0${mm}`;
-//   }
-//   if (HH < 10) {
-//     HH = `0${HH}`;
-//   }
-//   if (MM < 10) {
-//     MM = `0${MM}`;
-//   }
-//   return `${HH}:${MM} ${ampm} ${mm}-${dd}`;
-// }
+  await pinpointSmsVoice.sendVoiceMessage(params, (err) => {
+    if (err) {
+      console.log('ERROR: pinpointSmsVoice', err.message);
+    }
+  });
+};
 
 const recursiveScan = (params, aItems = []) => {
   return dynamo
@@ -472,6 +470,95 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
   await Promise.all(
     smsList.map(async (sms) => {
       await sns.publish(sms).promise();
+    }),
+  );
+
+  // #########################################
+  // ###### Pinpoint Voice Messages  #########
+  // #########################################
+
+  const voiceActions = await actionsToTake.map((unit) => {
+    const actions = [...unit.actions.filter((action) => action.type && action.type.S === 'voice')];
+    const contactList = actions.map((action) => action.contact && action.contact.S);
+
+    return {
+      sensor: unit.sensor,
+      alarm: unit.alarm,
+      actions,
+      contacts: contactList,
+    };
+  });
+
+  const voiceList = [];
+  voiceActions.forEach((unit) => {
+    const sendOnlyTo = ['Auburn'];
+    const clientId = unit.sensor.clientId.S;
+
+    if (!sendOnlyTo.includes(clientId)) {
+      return;
+    }
+
+    unit.contacts.forEach((contact) => {
+      let alarmType = 'out of range';
+      switch (unit.alarm.alarmType.S) {
+        case 'outRange':
+          alarmType = 'out of range';
+          break;
+        default:
+          alarmType = unit.alarm.alarmType.S;
+      }
+
+      let value = parseFloat(unit.sensor.heartbeat.N);
+      const pressure = unit.sensor.pressure ? unit.sensor.pressure.BOOL : false;
+
+      switch (unit.sensor.unit ? unit.sensor.unit.S : '') {
+        case 'F':
+          break;
+        case 'C':
+          value = ((value - 32) * 5) / 9;
+          break;
+        case '%':
+          break;
+        case 'WC':
+          if (pressure && value !== -9999) {
+            const coef = parseFloat(unit.sensor.coef.N);
+            value = 0.015625 * (value - 4) + coef; // positive equation
+            if (!unit.sensor.positive.BOOL) {
+              // use negative equation
+              value -= 0.125;
+            }
+          }
+          break; // add equation to compute correct wc
+        default:
+          console.log(`${unit.sensor.txid.S} doesnt have unit configuration`);
+      }
+
+      voiceList.push({
+        message: `<speak> 
+          Hello, this is a message from Digitracker, you have an ${alarmType} 
+          alarm at the Sensor ${unit.sensor.name.S}, located at ${unit.sensor.location.S}.
+          You can view more info by going to the <break time="0.2s" />' +
+          app
+          <break time="0.2s" />
+          dot
+          <break time="0.2s" />
+          digitracker
+          <break time="0.2s" />
+          dot
+          <break time="0.2s" />
+          com,
+          and check the alarm pending.
+        </speak>`,
+        phoneNumber: contact,
+      });
+    });
+  });
+
+  console.log('voiceList', JSON.stringify(voiceList, null, 2));
+
+  await Promise.all(
+    voiceList.map(async ({ message, phoneNumber }) => {
+      await sendVoiceMessage(message, phoneNumber);
     }),
   );
 

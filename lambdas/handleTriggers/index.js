@@ -18,27 +18,6 @@ const pinpointConfig = {
 };
 const pinpointSmsVoice = new AWS.PinpointSMSVoice({ region: pinpointConfig.region });
 
-// Send Pinpoint Voice Message
-const sendVoiceMessage = async (message, phoneNumber) => {
-  const params = {
-    Content: {
-      SSMLMessage: {
-        LanguageCode: pinpointConfig.language,
-        Text: message,
-        VoiceId: pinpointConfig.voiceId,
-      },
-    },
-    DestinationPhoneNumber: phoneNumber,
-    OriginationPhoneNumber: pinpointConfig.originationNumber,
-  };
-
-  await pinpointSmsVoice.sendVoiceMessage(params, (err) => {
-    if (err) {
-      console.log('ERROR: pinpointSmsVoice', err.message);
-    }
-  });
-};
-
 const recursiveScan = (params, aItems = []) => {
   return dynamo
     .scan(params)
@@ -381,7 +360,7 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
     emailList = [emailMessage, ...emailList];
   });
 
-  console.log(`EMAIL LIST ${JSON.stringify(emailList, null, 2)}`);
+  console.log(`emailList ${JSON.stringify(emailList, null, 2)}`);
 
   await Promise.all(
     emailList.map(async (email) => {
@@ -556,11 +535,35 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
 
   console.log('voiceList', JSON.stringify(voiceList, null, 2));
 
-  await Promise.all(
-    voiceList.map(async ({ message, phoneNumber }) => {
-      await sendVoiceMessage(message, phoneNumber);
-    }),
-  );
+  try {
+    await Promise.all(
+      voiceList.map(async ({ message, phoneNumber }) => {
+        const params = {
+          Content: {
+            SSMLMessage: {
+              LanguageCode: pinpointConfig.language,
+              Text: message,
+              VoiceId: pinpointConfig.voiceId,
+            },
+          },
+          DestinationPhoneNumber: phoneNumber,
+          OriginationPhoneNumber: pinpointConfig.originationNumber,
+        };
+
+        await pinpointSmsVoice
+          .sendVoiceMessage(params, (err, data) => {
+            if (err) {
+              console.log('sendVoiceMessage - Error', err);
+            } else {
+              console.log('sendVoiceMessage - Success', data);
+            }
+          })
+          .promise();
+      }),
+    );
+  } catch (err) {
+    console.log('CATCH pinpointSmsVoice', err);
+  }
 
   // console.log("MESSAGES TO WRITE " + JSON.stringify(alarmMessagesToWrite, null, 2))
 

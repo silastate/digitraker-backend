@@ -14,7 +14,7 @@ const pinpointConfig = {
   region: 'us-east-1',
   originationNumber: '+19738335877',
   language: 'en-US',
-  voiceId: 'Salli',
+  voiceId: 'Matthew',
 };
 const pinpointSmsVoice = new AWS.PinpointSMSVoice({ region: pinpointConfig.region });
 
@@ -513,21 +513,7 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
       }
 
       voiceList.push({
-        message: `<speak> 
-          Hello, this is a message from Digitracker, you have an ${alarmType} 
-          alarm at the Sensor ${unit.sensor.name.S}, located at ${unit.sensor.location.S}.
-          You can view more info by going to the <break time="0.2s" />' +
-          app
-          <break time="0.2s" />
-          dot
-          <break time="0.2s" />
-          digitracker
-          <break time="0.2s" />
-          dot
-          <break time="0.2s" />
-          com,
-          and check the alarm pending.
-        </speak>`,
+        message: `<speak>Hello, this is a message from Digitracker, you have an  ${alarmType} alarm at the Sensor ${unit.sensor.name.S}, located at ${unit.sensor.location.S}, You can view more info by going to the , app , dot , digitracker , dot, com, and check the alarm pending.</speak>`,
         phoneNumber: contact,
       });
     });
@@ -536,31 +522,27 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
   console.log('voiceList', JSON.stringify(voiceList, null, 2));
 
   try {
-    await Promise.all(
-      voiceList.map(async ({ message, phoneNumber }) => {
-        const params = {
-          Content: {
-            SSMLMessage: {
-              LanguageCode: pinpointConfig.language,
-              Text: message,
-              VoiceId: pinpointConfig.voiceId,
-            },
+    voiceList.forEach(async ({ message, phoneNumber }) => {
+      const params = {
+        Content: {
+          SSMLMessage: {
+            LanguageCode: pinpointConfig.language,
+            Text: message,
+            VoiceId: pinpointConfig.voiceId,
           },
-          DestinationPhoneNumber: phoneNumber,
-          OriginationPhoneNumber: pinpointConfig.originationNumber,
-        };
+        },
+        DestinationPhoneNumber: phoneNumber,
+        OriginationPhoneNumber: pinpointConfig.originationNumber,
+      };
 
-        await pinpointSmsVoice
-          .sendVoiceMessage(params, (err, data) => {
-            if (err) {
-              console.log('sendVoiceMessage - Error', err);
-            } else {
-              console.log('sendVoiceMessage - Success', data);
-            }
-          })
-          .promise();
-      }),
-    );
+      await pinpointSmsVoice.sendVoiceMessage(params, (err, data) => {
+        if (err) {
+          console.log('sendVoiceMessage - Error', err);
+        } else {
+          console.log('sendVoiceMessage - Success', data);
+        }
+      }).promise();
+    });
   } catch (err) {
     console.log('CATCH pinpointSmsVoice', err);
   }

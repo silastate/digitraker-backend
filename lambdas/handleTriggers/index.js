@@ -470,12 +470,11 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
 
   const voiceList = [];
   voiceActions.forEach((unit) => {
-    const sendOnlyTo = ['Auburn'];
-    const clientId = unit.sensor.clientId.S;
-
-    if (!sendOnlyTo.includes(clientId)) {
-      return;
-    }
+    // const sendOnlyTo = ['Auburn'];
+    // const clientId = unit.sensor.clientId.S;
+    // if (!sendOnlyTo.includes(clientId)) {
+    //   return;
+    // }
 
     unit.contacts.forEach((contact) => {
       let alarmType = 'out of range';
@@ -511,9 +510,9 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
         default:
           console.log(`${unit.sensor.txid.S} doesnt have unit configuration`);
       }
-
+      const baseMessage = `Hello, this is a message from Digitracker, you have an  ${alarmType} alarm at the Sensor ${unit.sensor.name.S}, located at ${unit.sensor.location.S}, You can view more info by going to the , app , dot , digitracker , dot, com, and check the alarm pending.`;
       voiceList.push({
-        message: `<speak>Hello, this is a message from Digitracker, you have an  ${alarmType} alarm at the Sensor ${unit.sensor.name.S}, located at ${unit.sensor.location.S}, You can view more info by going to the , app , dot , digitracker , dot, com, and check the alarm pending.</speak>`,
+        message: `<speak>${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage}</speak>`,
         phoneNumber: contact,
       });
     });
@@ -535,13 +534,15 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
         OriginationPhoneNumber: pinpointConfig.originationNumber,
       };
 
-      await pinpointSmsVoice.sendVoiceMessage(params, (err, data) => {
-        if (err) {
-          console.log('sendVoiceMessage - Error', err);
-        } else {
-          console.log('sendVoiceMessage - Success', data);
-        }
-      }).promise();
+      await pinpointSmsVoice
+        .sendVoiceMessage(params, (err, data) => {
+          if (err) {
+            console.log('sendVoiceMessage - Error', err);
+          } else {
+            console.log('sendVoiceMessage - Success', data);
+          }
+        })
+        .promise();
     });
   } catch (err) {
     console.log('CATCH pinpointSmsVoice', err);

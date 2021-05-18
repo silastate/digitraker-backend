@@ -512,9 +512,16 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
           console.log(`${unit.sensor.txid.S} doesnt have unit configuration`);
       }
       const baseMessage = `Hello, this is a message from Digitracker, you have an  ${alarmType} alarm at the Sensor ${unit.sensor.name.S}, located at ${unit.sensor.location.S}, You can view more info by going to the , app , dot , digitracker , dot, com, and check the alarm pending.`;
+      
+      // pinpoint
+      // voiceList.push({
+      //   message: `<speak>${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage}</speak>`,
+      //   phoneNumber: contact,
+      // });
+      
       voiceList.push({
-        message: `<speak>${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage}</speak>`,
-        phoneNumber: contact,
+        message: `${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage}`,
+        phoneNumber: `+${contact}`,
       });
     });
   });

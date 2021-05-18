@@ -8,15 +8,16 @@ const ses = new AWS.SES({ region: 'us-east-2' });
 const sns = new AWS.SNS({ apiVersion: '2010-03-31' });
 
 const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
+const lambda = new AWS.Lambda();
 
 // Init Pinpoint Service
-const pinpointConfig = {
-  region: 'us-east-1',
-  originationNumber: '+19738335877',
-  language: 'en-US',
-  voiceId: 'Matthew',
-};
-const pinpointSmsVoice = new AWS.PinpointSMSVoice({ region: pinpointConfig.region });
+// const pinpointConfig = {
+//   region: 'us-east-1',
+//   originationNumber: '+19738335877',
+//   language: 'en-US',
+//   voiceId: 'Matthew',
+// };
+// const pinpointSmsVoice = new AWS.PinpointSMSVoice({ region: pinpointConfig.region });
 
 const recursiveScan = (params, aItems = []) => {
   return dynamo
@@ -522,30 +523,43 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
 
   try {
     voiceList.forEach(async ({ message, phoneNumber }) => {
+      // PINPOINT
+      // const params = {
+      //   Content: {
+      //     SSMLMessage: {
+      //       LanguageCode: pinpointConfig.language,
+      //       Text: message,
+      //       VoiceId: pinpointConfig.voiceId,
+      //     },
+      //   },
+      //   DestinationPhoneNumber: phoneNumber,
+      //   OriginationPhoneNumber: pinpointConfig.originationNumber,
+      // };
+
+      // await pinpointSmsVoice
+      //   .sendVoiceMessage(params, (err, data) => {
+      //     if (err) {
+      //       console.log('sendVoiceMessage - Error', err);
+      //     } else {
+      //       console.log('sendVoiceMessage - Success', data);
+      //     }
+      //   })
+      //   .promise();
+
+      // ClickSend Integration
       const params = {
-        Content: {
-          SSMLMessage: {
-            LanguageCode: pinpointConfig.language,
-            Text: message,
-            VoiceId: pinpointConfig.voiceId,
-          },
-        },
-        DestinationPhoneNumber: phoneNumber,
-        OriginationPhoneNumber: pinpointConfig.originationNumber,
+        FunctionName: 'clickSendVoiceIntegration',
+        Payload: JSON.stringify({
+          phoneNumber,
+          message,
+        }),
       };
 
-      await pinpointSmsVoice
-        .sendVoiceMessage(params, (err, data) => {
-          if (err) {
-            console.log('sendVoiceMessage - Error', err);
-          } else {
-            console.log('sendVoiceMessage - Success', data);
-          }
-        })
-        .promise();
+      await lambda.invoke(params).promise();
     });
   } catch (err) {
-    console.log('CATCH pinpointSmsVoice', err);
+    // console.log('CATCH pinpointSmsVoice', err);
+    console.log('CATCH ClickSend Integration', err);
   }
 
   // console.log("MESSAGES TO WRITE " + JSON.stringify(alarmMessagesToWrite, null, 2))

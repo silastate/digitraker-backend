@@ -4,20 +4,8 @@ const AWS = require('aws-sdk');
 
 AWS.config.update({ region: 'us-east-2' });
 
-const ses = new AWS.SES({ region: 'us-east-2' });
-const sns = new AWS.SNS({ apiVersion: '2010-03-31' });
-
 const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
 const lambda = new AWS.Lambda();
-
-// Init Pinpoint Service
-// const pinpointConfig = {
-//   region: 'us-east-1',
-//   originationNumber: '+19738335877',
-//   language: 'en-US',
-//   voiceId: 'Matthew',
-// };
-// const pinpointSmsVoice = new AWS.PinpointSMSVoice({ region: pinpointConfig.region });
 
 const recursiveScan = (params, aItems = []) => {
   return dynamo
@@ -181,16 +169,54 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
   };
 };
 
-exports.handler = async () => {
-  let sensors = await recursiveScan({
-    TableName: 'Sensors',
-    FilterExpression: 'attribute_exists(clientId)',
-  });
+const handleGateways = (gateway, escalation) => {
+  const gatewayMessageToWrite = [];
 
-  sensors = sensors.filter((s) => {
-    if (!Object.keys(s).includes('deleted')) return true;
-    if (s.deleted.BOOL !== true) return true;
-    return false;
+  const alarmLastAction = gateway.alarmLastAction.N;
+  const now = new Date().getTime();
+  const diff = now - alarmLastAction;
+  const diffMinutes = Math.floor(diff / 1000 / 60);
+  const timeoutDelay = escalation.delay ? escalation.delay.N : 60;
+  const alarmLastActionDiff = diffMinutes > timeoutDelay;
+  const timeoutActions = escalation.actions ? escalation.actions.L.map((action) => action.M) : [];
+
+  if (alarmLastActionDiff || parseInt(alarmLastAction, 10) === 0) {
+    gatewayMessageToWrite.push({
+      PutRequest: {
+        Item: {
+          ...gateway,
+          alarmOn: { BOOL: true },
+          alarmLastAction: { N: now.toString() },
+        },
+      },
+    });
+  }
+
+  return {
+    gatewayMessageToWrite,
+  };
+};
+
+const getEscalations = (escalations, sensorEscalationIds) => {
+  if (!sensorEscalationIds || !sensorEscalationIds.L.length) return [];
+
+  const parsedIds = sensorEscalationIds.L.map((item) => item.S);
+
+  return escalations.reduce((acc, value) => {
+    if (parsedIds.includes(value.id.S)) {
+      acc.push(value);
+    }
+    return acc;
+  }, []);
+};
+
+exports.handler = async () => {
+  const sensors = await recursiveScan({
+    TableName: 'Sensors',
+    FilterExpression: 'attribute_exists(clientId) AND attribute_not_exists(deleted) OR deleted = :deletedFalse',
+    ExpressionAttributeValues: {
+      ':deletedFalse': { BOOL: false },
+    },
   });
 
   const alarms = await recursiveScan({
@@ -201,9 +227,27 @@ exports.handler = async () => {
     },
   });
 
+  const escalationTable = await recursiveScan({
+    TableName: 'Escalation',
+    FilterExpression: 'attribute_not_exists(deleted) OR deleted = :deletedFalse',
+    ExpressionAttributeValues: {
+      ':deletedFalse': { BOOL: false },
+    },
+  });
+
+  const gatewayTable = await recursiveScan({
+    TableName: 'Gateways',
+    FilterExpression: 'attribute_not_exists(deleted) OR deleted = :deletedFalse',
+    ExpressionAttributeValues: {
+      ':deletedFalse': { BOOL: false },
+    },
+  });
+
+  const alarmGateways = [];
   let alarmMessagesToWrite = [];
   let sensorMessagesToWrite = [];
   let actionsToTake = [];
+  let gatewayMessageToWrite = [];
 
   // console.log(sensors, alarms)
   // const sensor1 = sensors.find((s) => s.txid.S === '1631197_0');
@@ -225,35 +269,77 @@ exports.handler = async () => {
   // ... olathelab
   // ];
 
-  // console.log(sensors)
+  await Promise.all(
+    gatewayTable.map(async (gateway) => {
+      const escalation = getEscalations(escalationTable, gateway.escalationsTimeout);
+      const timeoutEscalation = escalation && escalation.length > 0 ? escalation[0] : null;
+
+      if (timeoutEscalation) {
+        const now = new Date().getTime();
+        const diff = now - gateway.lastHeartbeat.N;
+        const diffMinutes = Math.floor(diff / 1000 / 60);
+        const timeoutDelay = timeoutEscalation.delay ? timeoutEscalation.delay.N : 60;
+        const gatewayIsOnTimeout = diffMinutes > timeoutDelay;
+
+        if (gatewayIsOnTimeout) {
+          alarmGateways.push(gateway.gatewayId);
+          const handleGatewayActions = await handleGateways(gateway, timeoutEscalation);
+          gatewayMessageToWrite = [...gatewayMessageToWrite, ...handleGatewayActions.gatewayMessageToWrite];
+        }
+
+        if (!gatewayIsOnTimeout && gateway.alarmOn.BOOL) {
+          // RESET THE ALARM ON THE GATEWAY
+          gatewayMessageToWrite.push({
+            PutRequest: {
+              Item: {
+                ...gateway,
+                alarmOn: { BOOL: false },
+                deleted: { BOOL: false },
+                alarmLastAction: { N: '0' },
+              },
+            },
+          });
+        }
+      }
+      // const alarmMessagesAndActions = handleGateways(gateway, timeoutEscalation[0], alarm);
+    }),
+  );
+
+  if (gatewayMessageToWrite.length) {
+    const gatewayParams = {
+      RequestItems: {
+        Gateways: gatewayMessageToWrite,
+      },
+    };
+
+    console.log('gatewayParams', JSON.stringify(gatewayParams));
+    await dynamo
+      .batchWriteItem(gatewayParams, (err, data) => {
+        if (err) {
+          console.log('gatewayMessageToWrite - Error ', err);
+        } else {
+          console.log('gatewayMessageToWrite - Success', data);
+        }
+      })
+      .promise();
+  }
 
   await Promise.all(
     sensors.map(async (sensor) => {
-      // console.log(sensor.txid.S)
       const onHold = sensor.onHold ? sensor.onHold.BOOL : false;
+
       if (!onHold) {
-        let escalations = await dynamo
-          .query({
-            TableName: 'Escalations',
-            KeyConditionExpression: 'txid=:txid',
-            ExpressionAttributeValues: {
-              ':txid': { S: sensor.txid.S },
-            },
-          })
-          .promise();
+        // --- Get Sensor escalations;
+        const escalations = getEscalations(escalationTable, sensor.escalations).map((item, index) => ({
+          ...item,
+          order: { N: (index + 1).toString() },
+        }));
 
-        escalations = escalations.Items;
-        escalations = escalations.filter((e) => {
-          if (!Object.keys(e).includes('deleted')) return true;
-          if (e.deleted.BOOL !== true) return true;
-          return false;
-        });
+        // --- Get Sensor timeout Escalation;
+        const timeoutEscalation = getEscalations(escalationTable, sensor.escalationsTimeout);
 
-        // --- Verify if need to create a new timeout alarm
-        const timeoutEscalation = escalations.find((e) => e.order.N === '-1');
-
-        if (timeoutEscalation) {
-          const timeoutMessageAndActions = handleTimeout(sensor, timeoutEscalation, alarms);
+        if (timeoutEscalation && timeoutEscalation.length > 0) {
+          const timeoutMessageAndActions = handleTimeout(sensor, timeoutEscalation[0], alarms);
 
           sensorMessagesToWrite = [...timeoutMessageAndActions.sensorMessagesToWrite, ...sensorMessagesToWrite];
           alarmMessagesToWrite = [...timeoutMessageAndActions.alarmMessagesToWrite, ...alarmMessagesToWrite];
@@ -328,7 +414,7 @@ exports.handler = async () => {
       default:
         console.log(`${unit.sensor.txid.S} doesnt have unit configuration`);
     }
-    
+
     // const coef = unit.sensor.coef ? unit.sensor.coef.N : "0"
     // value += parseFloat(coef)
 
@@ -372,22 +458,16 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
   if (emailList.length > 0) {
     try {
       const params = {
-          FunctionName: 'emailIntegration',
-          Payload: JSON.stringify({
-            emailList
-          }),
-        };
-        await lambda.invoke(params).promise();
+        FunctionName: 'emailIntegration',
+        Payload: JSON.stringify({
+          emailList,
+        }),
+      };
+      await lambda.invoke(params).promise();
     } catch (err) {
       console.log('CATCH EMAIL Integration', err);
     }
   }
-
-  // await Promise.all(
-  //   emailList.map(async (email) => {
-  //     await ses.sendEmail(email).promise();
-  //   }),
-  // );
 
   const smsActions = await actionsToTake.map((unit) => {
     let actions = unit.actions.filter((a) => a.type.S === 'sms');
@@ -403,19 +483,6 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
 
   const smsList = [];
   smsActions.forEach((unit) => {
-    // #########################################
-    // ##### used for sms testing ONLY #########
-    // #########################################
-
-    // const sendOnlyTo = ['HealthCare', 'Auburn', 'Aurora'];
-    // const clientId = unit.sensor.clientId.S;
-    // if (!sendOnlyTo.includes(clientId)) {
-    //   return;
-    // }
-
-    // #########################################
-    // #########################################
-
     unit.contacts.forEach((contact) => {
       let alarmType = 'out of range';
       switch (unit.alarm.alarmType.S) {
@@ -458,7 +525,7 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
       // const formatedCreatedAt = formatDate(unit.alarm.createdAt.N);
 
       smsList.push({
-        Message: `${(new Date()).toLocaleString("en-US", {timeZone: "America/Chicago"}) + " CST"}
+        Message: `${new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }) + ' CST'}
 Sensor: ${unit.sensor.name.S} (${unit.sensor.txid.S})
 Location: ${unit.sensor.location.S} (Gateway: ${unit.sensor.clientId.S})
 Alarm: ${alarmType}
@@ -472,30 +539,23 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S} `,
 
   console.log('smsList', JSON.stringify(smsList, null, 2));
 
-  if(smsList.length > 0) {
+  if (smsList.length > 0) {
     try {
       const params = {
-          FunctionName: 'smsIntegration',
-          Payload: JSON.stringify({
-            smsList
-          }),
-        };
-        await lambda.invoke(params).promise();
+        FunctionName: 'smsIntegration',
+        Payload: JSON.stringify({
+          smsList,
+        }),
+      };
+      await lambda.invoke(params).promise();
     } catch (err) {
       console.log('CATCH SMS Integration', err);
     }
   }
 
-
-  // await Promise.all(
-  //   smsList.map(async (sms) => {
-  //     await sns.publish(sms).promise();
-  //   }),
-  // );
-
-  // #########################################
-  // ###### Pinpoint Voice Messages  #########
-  // #########################################
+  // #############################
+  // ###### Voice Messages  ######
+  // #############################
 
   const voiceActions = await actionsToTake.map((unit) => {
     const actions = [...unit.actions.filter((action) => action.type && action.type.S === 'voice')];
@@ -511,12 +571,6 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S} `,
 
   const voiceList = [];
   voiceActions.forEach((unit) => {
-    // const sendOnlyTo = ['Auburn'];
-    // const clientId = unit.sensor.clientId.S;
-    // if (!sendOnlyTo.includes(clientId)) {
-    //   return;
-    // }
-
     unit.contacts.forEach((contact) => {
       let alarmType = 'out of range';
       switch (unit.alarm.alarmType.S) {
@@ -528,13 +582,7 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S} `,
       }
 
       const baseMessage = `Hello, this is a message from Digitracker, you have an  ${alarmType} alarm at the Sensor ${unit.sensor.name.S}, located at ${unit.sensor.location.S}, You can view more info by going to the , app , dot , digitracker , dot, com, and check the alarm pending.`;
-      
-      // pinpoint
-      // voiceList.push({
-      //   message: `<speak>${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage}</speak>`,
-      //   phoneNumber: contact,
-      // });
-      
+
       voiceList.push({
         message: `${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage}`,
         phoneNumber: `+${contact}`,
@@ -546,29 +594,6 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S} `,
 
   try {
     voiceList.forEach(async ({ message, phoneNumber }) => {
-      // PINPOINT
-      // const params = {
-      //   Content: {
-      //     SSMLMessage: {
-      //       LanguageCode: pinpointConfig.language,
-      //       Text: message,
-      //       VoiceId: pinpointConfig.voiceId,
-      //     },
-      //   },
-      //   DestinationPhoneNumber: phoneNumber,
-      //   OriginationPhoneNumber: pinpointConfig.originationNumber,
-      // };
-
-      // await pinpointSmsVoice
-      //   .sendVoiceMessage(params, (err, data) => {
-      //     if (err) {
-      //       console.log('sendVoiceMessage - Error', err);
-      //     } else {
-      //       console.log('sendVoiceMessage - Success', data);
-      //     }
-      //   })
-      //   .promise();
-
       // ClickSend Integration
       const params = {
         FunctionName: 'clickSendVoiceIntegration',
@@ -581,15 +606,10 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S} `,
       await lambda.invoke(params).promise();
     });
   } catch (err) {
-    // console.log('CATCH pinpointSmsVoice', err);
     console.log('CATCH ClickSend Integration', err);
   }
 
-  // console.log("MESSAGES TO WRITE " + JSON.stringify(alarmMessagesToWrite, null, 2))
-
   if (alarmMessagesToWrite.length > 0) {
-    // console.log('alarmMessagesToWrite', alarmMessagesToWrite);
-
     for (let i = 0; i < alarmMessagesToWrite.length; i += 25) {
       const params = {
         RequestItems: {

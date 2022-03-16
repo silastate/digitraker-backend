@@ -1,31 +1,31 @@
-"use strict";
+'use strict';
 
-const AWS = require("aws-sdk");
+const AWS = require('aws-sdk');
 
-AWS.config.update({ region: "us-east-2" });
+AWS.config.update({ region: 'us-east-2' });
 
-const dynamo = new AWS.DynamoDB({ apiVersion: "2012-08-10" });
+const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
 const lambda = new AWS.Lambda();
 
-exports.handler = async(event) => {
+exports.handler = async (event) => {
   let sensors = await recursiveScan({
-    TableName: "Sensors",
-    FilterExpression: "attribute_exists(clientId)",
+    TableName: 'Sensors',
+    FilterExpression: 'attribute_exists(clientId)',
   });
 
   sensors = sensors.filter(
     (sensorItem) => sensorItem.deleted && !sensorItem.deleted.BOOL
   );
 
-  const auburn = sensors.filter((s) => s.clientId.S === "Auburn");
+  const auburn = sensors.filter((s) => s.clientId.S === 'Auburn');
 
   sensors = [...auburn];
 
   const alarms = await recursiveScan({
-    TableName: "Alarms",
-    FilterExpression: "alarmOn = :o",
+    TableName: 'Alarms',
+    FilterExpression: 'alarmOn = :o',
     ExpressionAttributeValues: {
-      ":o": { BOOL: true },
+      ':o': { BOOL: true },
     },
   });
 
@@ -34,16 +34,17 @@ exports.handler = async(event) => {
   let actionsToTake = [];
 
   const newEscalations = await recursiveScan({
-    TableName: "Escalation",
-    FilterExpression: "attribute_not_exists(deleted) OR deleted = :deletedFalse",
+    TableName: 'Escalation',
+    FilterExpression:
+      'attribute_not_exists(deleted) OR deleted = :deletedFalse',
     ExpressionAttributeValues: {
-      ":deletedFalse": { BOOL: false },
+      ':deletedFalse': { BOOL: false },
     },
   });
 
   await Promise.all(
-    sensors.map(async(sensor) => {
-      console.log("sensor", JSON.stringify(sensor));
+    sensors.map(async (sensor) => {
+      console.log('sensor', JSON.stringify(sensor));
 
       // --- Get Sensor escalations;
       const escalations = getEscalations(
@@ -60,8 +61,8 @@ exports.handler = async(event) => {
         sensor.escalationsTimeout
       );
 
-      console.log("timeoutEscalation", JSON.stringify(timeoutEscalation));
-      console.log("normalEscalations", JSON.stringify(escalations));
+      console.log('timeoutEscalation', JSON.stringify(timeoutEscalation));
+      console.log('normalEscalations', JSON.stringify(escalations));
 
       if (timeoutEscalation.length > 0) {
         const timeoutMessageAndActions = handleTimeout(
@@ -110,9 +111,9 @@ exports.handler = async(event) => {
     })
   );
 
-  console.log("sensorMessagesToWrite", JSON.stringify(sensorMessagesToWrite));
-  console.log("alarmMessagesToWrite", JSON.stringify(alarmMessagesToWrite));
-  console.log("actionsToTake", JSON.stringify(actionsToTake));
+  console.log('sensorMessagesToWrite', JSON.stringify(sensorMessagesToWrite));
+  console.log('alarmMessagesToWrite', JSON.stringify(alarmMessagesToWrite));
+  console.log('actionsToTake', JSON.stringify(actionsToTake));
 
   return;
 };
@@ -167,7 +168,7 @@ const handleTimeout = (sensor, timeoutEscalation, alarms) => {
 
   const timeoutActions = timeoutEscalation.actions.L.map((action) => action.M);
   const timeoutAlarms = alarms.filter(
-    (a) => a.txid.S === sensor.txid.S && a.alarmType.S === "timeout"
+    (a) => a.txid.S === sensor.txid.S && a.alarmType.S === 'timeout'
   );
 
   const alarmMessagesToWrite = [];
@@ -183,13 +184,13 @@ const handleTimeout = (sensor, timeoutEscalation, alarms) => {
         Item: {
           txid: { S: sensor.txid.S },
           createdAt: { N: Date.now().toString() },
-          closedAt: { N: "-1" },
-          closedBy: { S: "" },
-          message: { S: "" },
+          closedAt: { N: '-1' },
+          closedBy: { S: '' },
+          message: { S: '' },
           alarmOn: { BOOL: true },
-          alarmType: { S: "timeout" },
+          alarmType: { S: 'timeout' },
           alarmId: { N: Date.now().toString() },
-          escalation: { N: "-1" },
+          escalation: { N: '-1' },
           lastEscalation: { N: Date.now().toString() },
         },
       },
@@ -201,7 +202,7 @@ const handleTimeout = (sensor, timeoutEscalation, alarms) => {
           ...sensor,
           alarmOn: { BOOL: true },
           hasEscalation: { BOOL: true },
-          alarmType: { S: "timeout" },
+          alarmType: { S: 'timeout' },
         },
       },
     });
@@ -211,7 +212,7 @@ const handleTimeout = (sensor, timeoutEscalation, alarms) => {
       actions: timeoutActions,
       alarm: {
         alarmType: {
-          S: "timeout",
+          S: 'timeout',
         },
       },
     });
@@ -252,9 +253,9 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
     currentEscalation = nextEscalation;
   }
 
-  const delay = !currentEscalation ?
-    Date.now() :
-    parseInt(currentEscalation.delay.N, 10) * 60 * 1000;
+  const delay = !currentEscalation
+    ? Date.now()
+    : parseInt(currentEscalation.delay.N, 10) * 60 * 1000;
 
   if (lastEscalationAt + delay < Date.now()) {
     // increase escalation take actions
@@ -282,8 +283,9 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
       },
     });
 
-    const alarmActions = !currentEscalation ? [] :
-      currentEscalation.actions.L.map((action) => action.M);
+    const alarmActions = !currentEscalation
+      ? []
+      : currentEscalation.actions.L.map((action) => action.M);
 
     actionsToTake.push({
       sensor,

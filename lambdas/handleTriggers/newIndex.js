@@ -43,7 +43,9 @@ const handleTimeout = (sensor, timeoutEscalation, alarms) => {
   // console.log("HANDLETIMEOUT", sensor.txid.S)
 
   const timeoutActions = timeoutEscalation.actions.L.map((action) => action.M);
-  const timeoutAlarms = alarms.filter((a) => a.txid.S === sensor.txid.S && a.alarmType.S === 'timeout');
+  const timeoutAlarms = alarms.filter(
+    (a) => a.txid.S === sensor.txid.S && a.alarmType.S === 'timeout'
+  );
 
   const alarmMessagesToWrite = [];
   const actionsToTake = [];
@@ -110,7 +112,9 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
   const currentOrder = parseInt(alarm.escalation.N, 10);
   const nextOrder = (currentOrder + 1).toString();
   const nextEscalation = escalations.find((e) => e.order.N === nextOrder);
-  let currentEscalation = escalations.find((e) => e.order.N === currentOrder.toString());
+  let currentEscalation = escalations.find(
+    (e) => e.order.N === currentOrder.toString()
+  );
 
   const hasNextEscalation = !!nextEscalation;
 
@@ -125,7 +129,9 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
     currentEscalation = nextEscalation;
   }
 
-  const delay = !currentEscalation ? Date.now() : parseInt(currentEscalation.delay.N, 10) * 60 * 1000;
+  const delay = !currentEscalation
+    ? Date.now()
+    : parseInt(currentEscalation.delay.N, 10) * 60 * 1000;
 
   if (lastEscalationAt + delay < Date.now()) {
     // increase escalation take actions
@@ -153,7 +159,9 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
       },
     });
 
-    const alarmActions = !currentEscalation ? [] : currentEscalation.actions.L.map((action) => action.M);
+    const alarmActions = !currentEscalation
+      ? []
+      : currentEscalation.actions.L.map((action) => action.M);
 
     actionsToTake.push({
       sensor,
@@ -178,7 +186,9 @@ const handleGateways = (gateway, escalation) => {
   const diffMinutes = Math.floor(diff / 1000 / 60);
   const timeoutDelay = escalation.delay ? escalation.delay.N : 60;
   const alarmLastActionDiff = diffMinutes > timeoutDelay;
-  const timeoutActions = escalation.actions ? escalation.actions.L.map((action) => action.M) : [];
+  const timeoutActions = escalation.actions
+    ? escalation.actions.L.map((action) => action.M)
+    : [];
 
   if (alarmLastActionDiff || parseInt(alarmLastAction, 10) === 0) {
     gatewayMessageToWrite.push({
@@ -213,7 +223,8 @@ const getEscalations = (escalations, sensorEscalationIds) => {
 exports.handler = async () => {
   const sensors = await recursiveScan({
     TableName: 'Sensors',
-    FilterExpression: 'attribute_exists(clientId) AND attribute_not_exists(deleted) OR deleted = :deletedFalse',
+    FilterExpression:
+      'attribute_exists(clientId) AND attribute_not_exists(deleted) OR deleted = :deletedFalse',
     ExpressionAttributeValues: {
       ':deletedFalse': { BOOL: false },
     },
@@ -229,7 +240,8 @@ exports.handler = async () => {
 
   const escalationTable = await recursiveScan({
     TableName: 'Escalation',
-    FilterExpression: 'attribute_not_exists(deleted) OR deleted = :deletedFalse',
+    FilterExpression:
+      'attribute_not_exists(deleted) OR deleted = :deletedFalse',
     ExpressionAttributeValues: {
       ':deletedFalse': { BOOL: false },
     },
@@ -237,7 +249,8 @@ exports.handler = async () => {
 
   const gatewayTable = await recursiveScan({
     TableName: 'Gateways',
-    FilterExpression: 'attribute_not_exists(deleted) OR deleted = :deletedFalse',
+    FilterExpression:
+      'attribute_not_exists(deleted) OR deleted = :deletedFalse',
     ExpressionAttributeValues: {
       ':deletedFalse': { BOOL: false },
     },
@@ -271,20 +284,32 @@ exports.handler = async () => {
 
   await Promise.all(
     gatewayTable.map(async (gateway) => {
-      const escalation = getEscalations(escalationTable, gateway.escalationsTimeout);
-      const timeoutEscalation = escalation && escalation.length > 0 ? escalation[0] : null;
+      const escalation = getEscalations(
+        escalationTable,
+        gateway.escalationsTimeout
+      );
+      const timeoutEscalation =
+        escalation && escalation.length > 0 ? escalation[0] : null;
 
       if (timeoutEscalation) {
         const now = new Date().getTime();
         const diff = now - gateway.lastHeartbeat.N;
         const diffMinutes = Math.floor(diff / 1000 / 60);
-        const timeoutDelay = timeoutEscalation.delay ? timeoutEscalation.delay.N : 60;
+        const timeoutDelay = timeoutEscalation.delay
+          ? timeoutEscalation.delay.N
+          : 60;
         const gatewayIsOnTimeout = diffMinutes > timeoutDelay;
 
         if (gatewayIsOnTimeout) {
           alarmGateways.push(gateway.gatewayId);
-          const handleGatewayActions = await handleGateways(gateway, timeoutEscalation);
-          gatewayMessageToWrite = [...gatewayMessageToWrite, ...handleGatewayActions.gatewayMessageToWrite];
+          const handleGatewayActions = await handleGateways(
+            gateway,
+            timeoutEscalation
+          );
+          gatewayMessageToWrite = [
+            ...gatewayMessageToWrite,
+            ...handleGatewayActions.gatewayMessageToWrite,
+          ];
         }
 
         if (!gatewayIsOnTimeout && gateway.alarmOn.BOOL) {
@@ -302,7 +327,7 @@ exports.handler = async () => {
         }
       }
       // const alarmMessagesAndActions = handleGateways(gateway, timeoutEscalation[0], alarm);
-    }),
+    })
   );
 
   if (gatewayMessageToWrite.length) {
@@ -330,34 +355,66 @@ exports.handler = async () => {
 
       if (!onHold) {
         // --- Get Sensor escalations;
-        const escalations = getEscalations(escalationTable, sensor.escalations).map((item, index) => ({
+        const escalations = getEscalations(
+          escalationTable,
+          sensor.escalations
+        ).map((item, index) => ({
           ...item,
           order: { N: (index + 1).toString() },
         }));
 
         // --- Get Sensor timeout Escalation;
-        const timeoutEscalation = getEscalations(escalationTable, sensor.escalationsTimeout);
+        const timeoutEscalation = getEscalations(
+          escalationTable,
+          sensor.escalationsTimeout
+        );
 
         if (timeoutEscalation && timeoutEscalation.length > 0) {
-          const timeoutMessageAndActions = handleTimeout(sensor, timeoutEscalation[0], alarms);
+          const timeoutMessageAndActions = handleTimeout(
+            sensor,
+            timeoutEscalation[0],
+            alarms
+          );
 
-          sensorMessagesToWrite = [...timeoutMessageAndActions.sensorMessagesToWrite, ...sensorMessagesToWrite];
-          alarmMessagesToWrite = [...timeoutMessageAndActions.alarmMessagesToWrite, ...alarmMessagesToWrite];
-          actionsToTake = [...timeoutMessageAndActions.actionsToTake, ...actionsToTake];
+          sensorMessagesToWrite = [
+            ...timeoutMessageAndActions.sensorMessagesToWrite,
+            ...sensorMessagesToWrite,
+          ];
+          alarmMessagesToWrite = [
+            ...timeoutMessageAndActions.alarmMessagesToWrite,
+            ...alarmMessagesToWrite,
+          ];
+          actionsToTake = [
+            ...timeoutMessageAndActions.actionsToTake,
+            ...actionsToTake,
+          ];
         }
 
         // --- Verify if need to create new alarms
         const alarmsOn = alarms.filter((a) => a.txid.S === sensor.txid.S);
 
         await alarmsOn.forEach((alarm) => {
-          const alarmMessagesAndActions = handleAlarms(sensor, escalations, alarm);
+          const alarmMessagesAndActions = handleAlarms(
+            sensor,
+            escalations,
+            alarm
+          );
 
-          sensorMessagesToWrite = [...alarmMessagesAndActions.sensorMessagesToWrite, ...sensorMessagesToWrite];
-          alarmMessagesToWrite = [...alarmMessagesAndActions.alarmMessagesToWrite, ...alarmMessagesToWrite];
-          actionsToTake = [...alarmMessagesAndActions.actionsToTake, ...actionsToTake];
+          sensorMessagesToWrite = [
+            ...alarmMessagesAndActions.sensorMessagesToWrite,
+            ...sensorMessagesToWrite,
+          ];
+          alarmMessagesToWrite = [
+            ...alarmMessagesAndActions.alarmMessagesToWrite,
+            ...alarmMessagesToWrite,
+          ];
+          actionsToTake = [
+            ...alarmMessagesAndActions.actionsToTake,
+            ...actionsToTake,
+          ];
         });
       }
-    }),
+    })
   );
 
   console.log('actionsToTake', JSON.stringify(actionsToTake, null, 2));
@@ -431,7 +488,7 @@ exports.handler = async () => {
               unit.sensor.clientId.S
             }). You can view the sensor by going to http://app.digitraker.com/dashboard/${unit.sensor.location.S.replace(
               / /g,
-              '%20',
+              '%20'
             )}/${
               unit.sensor.txid.S
             } and check the alarm pending. \n\nIf you have any concerns, you can reach out to us at http://www.digitraker.com.\n
@@ -444,7 +501,9 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
           },
         },
         Subject: {
-          Data: `[${alarmType.toUpperCase()}] ${unit.sensor.name.S} at ${unit.sensor.location.S}.`,
+          Data: `[${alarmType.toUpperCase()}] ${unit.sensor.name.S} at ${
+            unit.sensor.location.S
+          }.`,
         },
       },
       Source: 'no-reply@digitraker.com',
@@ -525,7 +584,9 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
       // const formatedCreatedAt = formatDate(unit.alarm.createdAt.N);
 
       smsList.push({
-        Message: `${new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }) + ' CST'}
+        Message: `${`${new Date().toLocaleString('en-US', {
+          timeZone: 'America/Chicago',
+        })} CST`}
 Sensor: ${unit.sensor.name.S} (${unit.sensor.txid.S})
 Location: ${unit.sensor.location.S} (Gateway: ${unit.sensor.clientId.S})
 Alarm: ${alarmType}
@@ -558,8 +619,14 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S} `,
   // #############################
 
   const voiceActions = await actionsToTake.map((unit) => {
-    const actions = [...unit.actions.filter((action) => action.type && action.type.S === 'voice')];
-    const contactList = actions.map((action) => action.contact && action.contact.S);
+    const actions = [
+      ...unit.actions.filter(
+        (action) => action.type && action.type.S === 'voice'
+      ),
+    ];
+    const contactList = actions.map(
+      (action) => action.contact && action.contact.S
+    );
 
     return {
       sensor: unit.sensor,

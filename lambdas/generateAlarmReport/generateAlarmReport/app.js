@@ -21,7 +21,8 @@ exports.lambdaHandler = async (event) => {
 
     const params = {
       TableName: 'Alarms',
-      FilterExpression: 'contains(:txids, #txid) AND alarmId BETWEEN :start AND :stop',
+      FilterExpression:
+        'contains(:txids, #txid) AND alarmId BETWEEN :start AND :stop',
       ExpressionAttributeNames: { '#txid': 'txid' },
       ExpressionAttributeValues: {
         ':txids': payload.txids,

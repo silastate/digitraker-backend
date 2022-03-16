@@ -55,7 +55,9 @@ const handleTimeout = (sensor, timeoutEscalation, alarms) => {
   // console.log("HANDLETIMEOUT", sensor.txid.S)
 
   const timeoutActions = timeoutEscalation.actions.L.map((action) => action.M);
-  const timeoutAlarms = alarms.filter((a) => a.txid.S === sensor.txid.S && a.alarmType.S === 'timeout');
+  const timeoutAlarms = alarms.filter(
+    (a) => a.txid.S === sensor.txid.S && a.alarmType.S === 'timeout'
+  );
 
   const alarmMessagesToWrite = [];
   const actionsToTake = [];
@@ -122,7 +124,9 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
   const currentOrder = parseInt(alarm.escalation.N, 10);
   const nextOrder = (currentOrder + 1).toString();
   const nextEscalation = escalations.find((e) => e.order.N === nextOrder);
-  let currentEscalation = escalations.find((e) => e.order.N === currentOrder.toString());
+  let currentEscalation = escalations.find(
+    (e) => e.order.N === currentOrder.toString()
+  );
 
   const hasNextEscalation = !!nextEscalation;
 
@@ -137,7 +141,9 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
     currentEscalation = nextEscalation;
   }
 
-  const delay = !currentEscalation ? Date.now() : parseInt(currentEscalation.delay.N, 10) * 60 * 1000;
+  const delay = !currentEscalation
+    ? Date.now()
+    : parseInt(currentEscalation.delay.N, 10) * 60 * 1000;
 
   if (lastEscalationAt + delay < Date.now()) {
     // increase escalation take actions
@@ -165,7 +171,9 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
       },
     });
 
-    const alarmActions = !currentEscalation ? [] : currentEscalation.actions.L.map((action) => action.M);
+    const alarmActions = !currentEscalation
+      ? []
+      : currentEscalation.actions.L.map((action) => action.M);
 
     actionsToTake.push({
       sensor,
@@ -253,25 +261,51 @@ exports.handler = async () => {
         const timeoutEscalation = escalations.find((e) => e.order.N === '-1');
 
         if (timeoutEscalation) {
-          const timeoutMessageAndActions = handleTimeout(sensor, timeoutEscalation, alarms);
+          const timeoutMessageAndActions = handleTimeout(
+            sensor,
+            timeoutEscalation,
+            alarms
+          );
 
-          sensorMessagesToWrite = [...timeoutMessageAndActions.sensorMessagesToWrite, ...sensorMessagesToWrite];
-          alarmMessagesToWrite = [...timeoutMessageAndActions.alarmMessagesToWrite, ...alarmMessagesToWrite];
-          actionsToTake = [...timeoutMessageAndActions.actionsToTake, ...actionsToTake];
+          sensorMessagesToWrite = [
+            ...timeoutMessageAndActions.sensorMessagesToWrite,
+            ...sensorMessagesToWrite,
+          ];
+          alarmMessagesToWrite = [
+            ...timeoutMessageAndActions.alarmMessagesToWrite,
+            ...alarmMessagesToWrite,
+          ];
+          actionsToTake = [
+            ...timeoutMessageAndActions.actionsToTake,
+            ...actionsToTake,
+          ];
         }
 
         // --- Verify if need to create new alarms
         const alarmsOn = alarms.filter((a) => a.txid.S === sensor.txid.S);
 
         await alarmsOn.forEach((alarm) => {
-          const alarmMessagesAndActions = handleAlarms(sensor, escalations, alarm);
+          const alarmMessagesAndActions = handleAlarms(
+            sensor,
+            escalations,
+            alarm
+          );
 
-          sensorMessagesToWrite = [...alarmMessagesAndActions.sensorMessagesToWrite, ...sensorMessagesToWrite];
-          alarmMessagesToWrite = [...alarmMessagesAndActions.alarmMessagesToWrite, ...alarmMessagesToWrite];
-          actionsToTake = [...alarmMessagesAndActions.actionsToTake, ...actionsToTake];
+          sensorMessagesToWrite = [
+            ...alarmMessagesAndActions.sensorMessagesToWrite,
+            ...sensorMessagesToWrite,
+          ];
+          alarmMessagesToWrite = [
+            ...alarmMessagesAndActions.alarmMessagesToWrite,
+            ...alarmMessagesToWrite,
+          ];
+          actionsToTake = [
+            ...alarmMessagesAndActions.actionsToTake,
+            ...actionsToTake,
+          ];
         });
       }
-    }),
+    })
   );
 
   console.log('actionsToTake', JSON.stringify(actionsToTake, null, 2));
@@ -328,7 +362,7 @@ exports.handler = async () => {
       default:
         console.log(`${unit.sensor.txid.S} doesnt have unit configuration`);
     }
-    
+
     // const coef = unit.sensor.coef ? unit.sensor.coef.N : "0"
     // value += parseFloat(coef)
 
@@ -345,7 +379,7 @@ exports.handler = async () => {
               unit.sensor.clientId.S
             }). You can view the sensor by going to http://app.digitraker.com/dashboard/${unit.sensor.location.S.replace(
               / /g,
-              '%20',
+              '%20'
             )}/${
               unit.sensor.txid.S
             } and check the alarm pending. \n\nIf you have any concerns, you can reach out to us at http://www.digitraker.com.\n
@@ -358,7 +392,9 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
           },
         },
         Subject: {
-          Data: `[${alarmType.toUpperCase()}] ${unit.sensor.name.S} at ${unit.sensor.location.S}.`,
+          Data: `[${alarmType.toUpperCase()}] ${unit.sensor.name.S} at ${
+            unit.sensor.location.S
+          }.`,
         },
       },
       Source: 'no-reply@digitraker.com',
@@ -372,12 +408,12 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
   if (emailList.length > 0) {
     try {
       const params = {
-          FunctionName: 'emailIntegration',
-          Payload: JSON.stringify({
-            emailList
-          }),
-        };
-        await lambda.invoke(params).promise();
+        FunctionName: 'emailIntegration',
+        Payload: JSON.stringify({
+          emailList,
+        }),
+      };
+      await lambda.invoke(params).promise();
     } catch (err) {
       console.log('CATCH EMAIL Integration', err);
     }
@@ -458,7 +494,9 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
       // const formatedCreatedAt = formatDate(unit.alarm.createdAt.N);
 
       smsList.push({
-        Message: `${(new Date()).toLocaleString("en-US", {timeZone: "America/Chicago"}) + " CST"}
+        Message: `${`${new Date().toLocaleString('en-US', {
+          timeZone: 'America/Chicago',
+        })} CST`}
 Sensor: ${unit.sensor.name.S} (${unit.sensor.txid.S})
 Location: ${unit.sensor.location.S} (Gateway: ${unit.sensor.clientId.S})
 Alarm: ${alarmType}
@@ -472,20 +510,19 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S} `,
 
   console.log('smsList', JSON.stringify(smsList, null, 2));
 
-  if(smsList.length > 0) {
+  if (smsList.length > 0) {
     try {
       const params = {
-          FunctionName: 'smsIntegration',
-          Payload: JSON.stringify({
-            smsList
-          }),
-        };
-        await lambda.invoke(params).promise();
+        FunctionName: 'smsIntegration',
+        Payload: JSON.stringify({
+          smsList,
+        }),
+      };
+      await lambda.invoke(params).promise();
     } catch (err) {
       console.log('CATCH SMS Integration', err);
     }
   }
-
 
   // await Promise.all(
   //   smsList.map(async (sms) => {
@@ -498,8 +535,14 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S} `,
   // #########################################
 
   const voiceActions = await actionsToTake.map((unit) => {
-    const actions = [...unit.actions.filter((action) => action.type && action.type.S === 'voice')];
-    const contactList = actions.map((action) => action.contact && action.contact.S);
+    const actions = [
+      ...unit.actions.filter(
+        (action) => action.type && action.type.S === 'voice'
+      ),
+    ];
+    const contactList = actions.map(
+      (action) => action.contact && action.contact.S
+    );
 
     return {
       sensor: unit.sensor,
@@ -528,13 +571,13 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S} `,
       }
 
       const baseMessage = `Hello, this is a message from Digitracker, you have an  ${alarmType} alarm at the Sensor ${unit.sensor.name.S}, located at ${unit.sensor.location.S}, You can view more info by going to the , app , dot , digitracker , dot, com, and check the alarm pending.`;
-      
+
       // pinpoint
       // voiceList.push({
       //   message: `<speak>${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage}</speak>`,
       //   phoneNumber: contact,
       // });
-      
+
       voiceList.push({
         message: `${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage} ${baseMessage}`,
         phoneNumber: `+${contact}`,

@@ -12,11 +12,15 @@ const cleanExtraAlarms = (alarmsOn) => {
   const alarmsToDelete = [];
 
   const allExtraDeleteRequest = allAlarmTypes.forEach((alarmType) => {
-    const alarmsOnOfAlarmType = alarmsOn.filter((a) => a.alarmType.S === alarmType);
+    const alarmsOnOfAlarmType = alarmsOn.filter(
+      (a) => a.alarmType.S === alarmType
+    );
     if (alarmsOnOfAlarmType.length > 1) {
       // keep the oldest one
       // add all others to the delete list
-      alarmsOnOfAlarmType.sort((a, b) => (parseInt(a.alarmId.N, 10) > parseInt(b.alarmId.N, 10) ? 1 : -1));
+      alarmsOnOfAlarmType.sort((a, b) =>
+        parseInt(a.alarmId.N, 10) > parseInt(b.alarmId.N, 10) ? 1 : -1
+      );
 
       const extraAlarmsToDelete = alarmsOnOfAlarmType.slice(1);
       alarmsToKeep.push(alarmsOnOfAlarmType[0]);
@@ -109,11 +113,17 @@ exports.handler = async (event) => {
 
       const cleanedAlarmMessages = await cleanExtraAlarms(txidAlarms.Items);
 
-      deleteMessages = [...cleanedAlarmMessages.alarmsToDelete, ...deleteMessages];
+      deleteMessages = [
+        ...cleanedAlarmMessages.alarmsToDelete,
+        ...deleteMessages,
+      ];
 
       const cleanAlarms = cleanedAlarmMessages.alarmsToKeep;
 
-      console.log('cleanAlarmMessages', JSON.stringify(cleanedAlarmMessages, null, 2));
+      console.log(
+        'cleanAlarmMessages',
+        JSON.stringify(cleanedAlarmMessages, null, 2)
+      );
 
       let outRange = false;
       let battery = false;
@@ -153,7 +163,10 @@ exports.handler = async (event) => {
       // item += parseFloat(coef)
 
       // out of range alarm - compare value with ranges
-      if (item > parseFloat(info.rangeMax.N) || item < parseFloat(info.rangeMin.N)) {
+      if (
+        item > parseFloat(info.rangeMax.N) ||
+        item < parseFloat(info.rangeMin.N)
+      ) {
         // console.log("outRange")
         outRange = true;
       }
@@ -200,22 +213,34 @@ exports.handler = async (event) => {
       let timeoutHasEscalated = false;
 
       if (txidAlarms.Count !== 0) {
-        containsOutRange = cleanAlarms.filter((a) => a.alarmType.S === 'outRange').length > 0;
-        containsTamper = cleanAlarms.filter((a) => a.alarmType.S === 'tamper').length > 0;
-        containsBattery = cleanAlarms.filter((a) => a.alarmType.S === 'lowBattery').length > 0;
-        containsTimeout = cleanAlarms.filter((a) => a.alarmType.S === 'timeout').length > 0;
+        containsOutRange =
+          cleanAlarms.filter((a) => a.alarmType.S === 'outRange').length > 0;
+        containsTamper =
+          cleanAlarms.filter((a) => a.alarmType.S === 'tamper').length > 0;
+        containsBattery =
+          cleanAlarms.filter((a) => a.alarmType.S === 'lowBattery').length > 0;
+        containsTimeout =
+          cleanAlarms.filter((a) => a.alarmType.S === 'timeout').length > 0;
 
         if (containsOutRange) {
-          outRangeHasEscalated = cleanAlarms.filter((a) => a.alarmType.S === 'outRange')[0].escalation.N !== '0';
+          outRangeHasEscalated =
+            cleanAlarms.filter((a) => a.alarmType.S === 'outRange')[0]
+              .escalation.N !== '0';
         }
         if (containsBattery) {
-          batteryHasEscalated = cleanAlarms.filter((a) => a.alarmType.S === 'lowBattery')[0].escalation.N !== '0';
+          batteryHasEscalated =
+            cleanAlarms.filter((a) => a.alarmType.S === 'lowBattery')[0]
+              .escalation.N !== '0';
         }
         if (containsTamper) {
-          tamperHasEscalated = cleanAlarms.filter((a) => a.alarmType.S === 'tamper')[0].escalation.N !== '0';
+          tamperHasEscalated =
+            cleanAlarms.filter((a) => a.alarmType.S === 'tamper')[0].escalation
+              .N !== '0';
         }
         if (containsTimeout) {
-          timeoutHasEscalated = cleanAlarms.filter((a) => a.alarmType.S === 'timeout')[0].escalation.N !== '0';
+          timeoutHasEscalated =
+            cleanAlarms.filter((a) => a.alarmType.S === 'timeout')[0].escalation
+              .N !== '0';
         }
       }
 
@@ -257,7 +282,9 @@ exports.handler = async (event) => {
       }
       // if it was outofrange but is no more
       else if (!outRange && containsOutRange && !outRangeHasEscalated) {
-        const messageArray = cleanAlarms.filter((a) => a.alarmType.S === 'outRange');
+        const messageArray = cleanAlarms.filter(
+          (a) => a.alarmType.S === 'outRange'
+        );
 
         const deleteOutRangeMessages = messageArray.map((alarm) => ({
           DeleteRequest: {
@@ -338,7 +365,9 @@ exports.handler = async (event) => {
         // closedBy=Digitraker
         // closedAt= Date.now().toString()
 
-        const messageArray = cleanAlarms.filter((a) => a.alarmType.S === 'lowBattery');
+        const messageArray = cleanAlarms.filter(
+          (a) => a.alarmType.S === 'lowBattery'
+        );
 
         const batteryMessage = {
           PutRequest: {
@@ -423,7 +452,9 @@ exports.handler = async (event) => {
         // closedBy=Digitraker
         // closedAt= Date.now().toString()
 
-        const messageArray = cleanAlarms.filter((a) => a.alarmType.S === 'lowBattery');
+        const messageArray = cleanAlarms.filter(
+          (a) => a.alarmType.S === 'lowBattery'
+        );
 
         const tamperMessage = {
           PutRequest: {
@@ -472,7 +503,9 @@ exports.handler = async (event) => {
         // alarmOn=false
         // closedAt= Date.now().toString()
 
-        const messageArray = cleanAlarms.find((a) => a.alarmType.S === 'timeout');
+        const messageArray = cleanAlarms.find(
+          (a) => a.alarmType.S === 'timeout'
+        );
 
         const timeoutMessage = {
           PutRequest: {
@@ -540,6 +573,6 @@ exports.handler = async (event) => {
           .promise();
       }
       console.log('No messages written', txid);
-    }),
+    })
   );
 };

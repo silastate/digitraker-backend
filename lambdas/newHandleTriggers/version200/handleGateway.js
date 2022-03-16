@@ -11,23 +11,35 @@ module.exports = async (dynamo, { gatewayTable, escalationTable }) => {
 
   await Promise.all(
     gatewayTable.map(async (gateway) => {
-      const escalation = utils.getEscalations(escalationTable, gateway.escalationsTimeout);
-      const timeoutEscalation = escalation && escalation.length > 0 ? escalation[0] : null;
+      const escalation = utils.getEscalations(
+        escalationTable,
+        gateway.escalationsTimeout
+      );
+      const timeoutEscalation =
+        escalation && escalation.length > 0 ? escalation[0] : null;
 
       if (timeoutEscalation) {
         const now = new Date().getTime();
         const diff = now - gateway.lastHeartbeat.N;
         const diffMinutes = Math.floor(diff / 1000 / 60);
-        const timeoutDelay = timeoutEscalation.delay ? timeoutEscalation.delay.N : 60;
+        const timeoutDelay = timeoutEscalation.delay
+          ? timeoutEscalation.delay.N
+          : 60;
         const gatewayIsOnTimeout = diffMinutes > timeoutDelay;
 
         if (gatewayIsOnTimeout) {
           alarmGateways.push(gateway.gatewayId);
-          const handleGatewayActions = await handleGateway(gateway, timeoutEscalation);
-          gatewayMessageToWrite = [...gatewayMessageToWrite, ...handleGatewayActions.gatewayMessageToWrite];
+          const handleGatewayActions = await handleGateway(
+            gateway,
+            timeoutEscalation
+          );
+          gatewayMessageToWrite = [
+            ...gatewayMessageToWrite,
+            ...handleGatewayActions.gatewayMessageToWrite,
+          ];
         }
 
-        if (!gatewayIsOnTimeout && gateway.alarmOn.BOOL) {
+        if (!gatewayIsOnTimeout && gateway?.alarmOn?.BOOL) {
           // RESET THE ALARM ON THE GATEWAY
           gatewayMessageToWrite.push({
             PutRequest: {
@@ -41,7 +53,7 @@ module.exports = async (dynamo, { gatewayTable, escalationTable }) => {
           });
         }
       }
-    }),
+    })
   );
 
   if (gatewayMessageToWrite.length) {
@@ -73,13 +85,15 @@ module.exports = async (dynamo, { gatewayTable, escalationTable }) => {
 const handleGateway = async (gateway, escalation) => {
   const gatewayMessageToWrite = [];
 
-  const alarmLastAction = gateway.alarmLastAction.N;
+  const alarmLastAction = gateway.alarmLastAction?.N;
   const now = new Date().getTime();
   const diff = now - alarmLastAction;
   const diffMinutes = Math.ceil(diff / 1000 / 60);
   const timeoutDelay = escalation.delay ? escalation.delay.N : 60;
   const alarmLastActionDiff = diffMinutes >= timeoutDelay;
-  const timeoutActions = escalation.actions ? escalation.actions.L.map((action) => action.M) : [];
+  const timeoutActions = escalation.actions
+    ? escalation.actions.L.map((action) => action.M)
+    : [];
 
   if (alarmLastActionDiff || parseInt(alarmLastAction, 10) === 0) {
     gatewayMessageToWrite.push({
@@ -92,9 +106,15 @@ const handleGateway = async (gateway, escalation) => {
       },
     });
 
-    const emailActionsToTake = timeoutActions.filter((action) => action?.type?.S === 'email');
-    const smsActionsToTake = timeoutActions.filter((action) => action?.type?.S === 'sms');
-    const voiceActionsToTake = timeoutActions.filter((action) => action?.type?.S === 'voice');
+    const emailActionsToTake = timeoutActions.filter(
+      (action) => action?.type?.S === 'email'
+    );
+    const smsActionsToTake = timeoutActions.filter(
+      (action) => action?.type?.S === 'sms'
+    );
+    const voiceActionsToTake = timeoutActions.filter(
+      (action) => action?.type?.S === 'voice'
+    );
 
     await handleEmailActions(gateway, emailActionsToTake);
     await handleSMSActions(gateway, smsActionsToTake);
@@ -116,14 +136,19 @@ const handleEmailActions = async (gateway, actions) => {
     Message: {
       Body: {
         Text: {
-          Data: `The Gateway ${gateway.gatewayId.S} located at ${gateway.clientId.S} has a timeout alarm active.\n
+          Data: `The Gateway ${gateway.gatewayId.S} located at ${
+            gateway.clientId.S
+          } has a timeout alarm active.\n
 Please check the internet connection or verify if the gateway have some physical problem.\n
 If you have any concerns, you can reach out to us at http://www.digitraker.com.\n
 Gateway: ${gateway.gatewayId.S}
 Alarm: Timeout
-Last Message: ${new Date(Number(gateway.lastHeartbeat.N)).toLocaleString('en-US', {
-            timeZone: 'America/Chicago',
-          })} CST`,
+Last Message: ${new Date(Number(gateway.lastHeartbeat.N)).toLocaleString(
+            'en-US',
+            {
+              timeZone: 'America/Chicago',
+            }
+          )} CST`,
         },
       },
       Subject: {
@@ -150,13 +175,18 @@ Last Message: ${new Date(Number(gateway.lastHeartbeat.N)).toLocaleString('en-US'
 
 const handleSMSActions = async (gateway, actions) => {
   const smsList = actions.map((action) => ({
-    Message: `${new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' })} CST
+    Message: `${new Date().toLocaleString('en-US', {
+      timeZone: 'America/Chicago',
+    })} CST
 Gateway: ${gateway.gatewayId.S}
 Location: ${gateway.clientId.S}
 Alarm: TIMEOUT
-Last Message: ${new Date(Number(gateway.lastHeartbeat.N)).toLocaleString('en-US', {
-      timeZone: 'America/Chicago',
-    })} CST`,
+Last Message: ${new Date(Number(gateway.lastHeartbeat.N)).toLocaleString(
+      'en-US',
+      {
+        timeZone: 'America/Chicago',
+      }
+    )} CST`,
     PhoneNumber: action.contact.S,
   }));
 

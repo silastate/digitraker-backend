@@ -3,24 +3,20 @@
   "version": "0.0.0",
   "description": "This application is the Backend of the DigiTraker monitoring system.",
   "main": "index.js",
+  "scripts": {
+    "format:check": "prettier --check .",
+    "format:write": "prettier --write .",
+    "lint:check": "eslint .",
+    "lint:fix": "eslint --fix ."
+  },
   "dependencies": {
-    "aws-sdk": "^2.899.0"
+    "aws-sdk": "^2.899.0",
+    "eslint-config-prettier": "^8.5.0",
+    "prettier": "^2.6.0"
   },
   "devDependencies": {
-    "@serverless/eslint-config": "^3.0.0",
-    "eslint": "^7.25.0",
-    "eslint-plugin-import": "^2.22.1",
-    "git-list-updated": "^1.2.1",
-    "prettier": "^2.2.1"
-  },
-  "scripts": {
-    "lint": "eslint  --ignore-path .gitignore .",
-    "lint:fix": "eslint  --ignore-path .gitignore . --fix",
-    "lint:updated": "pipe-git-updated --ext=js -- eslint --ignore-path .gitignore",
-    "prettier-check": "prettier -c --ignore-path .gitignore \"**/*.{css,html,js,json,md,yaml,yml}\"",
-    "prettier-check:updated": "pipe-git-updated --ext=css --ext=html --ext=js --ext=json --ext=md --ext=yaml --ext=yml -- prettier -c",
-    "prettify": "prettier --write --ignore-path .gitignore \"**/*.{css,html,js,json,md,yaml,yml}\"",
-    "prettify:updated": "pipe-git-updated --ext=css --ext=html --ext=js --ext=json --ext=md --ext=yaml --ext=yml -- prettier --write"
+    "eslint": "^8.11.0",
+    "git-list-updated": "^1.2.1"
   },
   "repository": {
     "type": "git",
@@ -31,12 +27,5 @@
   "bugs": {
     "url": "https://github.com/digitraker/backend/issues"
   },
-  "homepage": "https://github.com/digitraker/backend#readme",
-  "eslintConfig": {
-    "extends": "@serverless/eslint-config/node",
-    "root": true,
-    "rules": {
-      "no-console": 0
-    }
-  }
+  "homepage": "https://github.com/digitraker/backend#readme"
 }

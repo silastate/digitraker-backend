@@ -49,7 +49,10 @@ function validateNumber(event) {
       if (data.NumberValidateResponse.PhoneTypeCode == 0) {
         createEndpoint(data, event.firstName, event.lastName, event.source);
       } else {
-        console.log("Received a phone number that isn't capable of receiving " + 'SMS messages. No endpoint created.');
+        console.log(
+          "Received a phone number that isn't capable of receiving " +
+            'SMS messages. No endpoint created.'
+        );
       }
     }
   });
@@ -57,7 +60,8 @@ function validateNumber(event) {
 
 function createEndpoint(data, firstName, lastName, source) {
   const destinationNumber = data.NumberValidateResponse.CleansedPhoneNumberE164;
-  const endpointId = data.NumberValidateResponse.CleansedPhoneNumberE164.substring(1);
+  const endpointId =
+    data.NumberValidateResponse.CleansedPhoneNumberE164.substring(1);
 
   const params = {
     ApplicationId: projectId,
@@ -127,7 +131,9 @@ function sendConfirmation(destinationNumber) {
       console.log(err.message);
       // Otherwise, show the unique ID for the message.
     } else {
-      console.log(`Message sent! ${data.MessageResponse.Result[destinationNumber].StatusMessage}`);
+      console.log(
+        `Message sent! ${data.MessageResponse.Result[destinationNumber].StatusMessage}`
+      );
     }
   });
 }

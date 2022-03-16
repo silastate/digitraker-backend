@@ -46,5 +46,3 @@ const recursiveScan = (dynamo, params, aItems = []) => {
 };
 
 exports.recursiveScan = recursiveScan;
-
-

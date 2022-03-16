@@ -9,6 +9,8 @@ const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
 const version100 = require('./version100');
 const version200 = require('./version200');
 
+const CLIENTS_USING_NEW_ALARMS = ['Auburn', 'DrVince'];
+
 const recursiveScan = (dynamo, params, aItems = []) => {
   return dynamo
     .scan(params)
@@ -44,26 +46,22 @@ const recursiveScan = (dynamo, params, aItems = []) => {
 exports.handler = async () => {
   const sensors = await recursiveScan(dynamo, {
     TableName: 'Sensors',
-    FilterExpression: 'attribute_exists(clientId) AND attribute_not_exists(deleted) OR deleted = :deletedFalse',
+    FilterExpression:
+      'attribute_exists(clientId) AND attribute_not_exists(deleted) OR deleted = :deletedFalse',
     ExpressionAttributeValues: {
       ':deletedFalse': { BOOL: false },
     },
   });
 
-  const sensorsV100 = sensors.filter((s) => s.clientId.S !== 'Auburn');
-  const sensorsV200 = sensors.filter((s) => s.clientId.S === 'Auburn');
+  const sensorsV100 = sensors.filter(
+    (s) => !CLIENTS_USING_NEW_ALARMS.includes(s.clientId.S)
+  );
+  const sensorsV200 = sensors.filter((s) =>
+    CLIENTS_USING_NEW_ALARMS.includes(s.clientId.S)
+  );
 
-  // const healthcare = sensors.filter((s) => s.clientId.S === 'HealthCare');
-  // const aurora = sensors.filter((s) => s.clientId.S === 'Aurora');
-  // const dallas = sensors.filter((s) => s.clientId.S === 'DallasCounty');
-  // const ellsworth = sensors.filter((s) => s.clientId.S === 'Ellsworth');
-  // const olathelab = sensors.filter((s) => s.clientId.S === 'OlatheLab');
-
-
-  
-  // QUANDO FOR COLOCAR EM PROD, REMOVER ESSA LINHA
-  // const responseV100 = await version100(sensorsV100);
-  // console.log('responseV100', responseV100);
+  const responseV100 = await version100(sensorsV100);
+  console.log('responseV100', responseV100);
 
   const responseV200 = await version200(sensorsV200);
   console.log('responseV200', responseV200);

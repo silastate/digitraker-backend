@@ -17,21 +17,45 @@ exports.lambdaHandler = async (event) => {
   let reqData = [];
 
   request.txids.forEach((txid) => {
-    for (let date = new Date(date1.getTime()); date < dateLimit; date.setDate(date.getDate() + 1)) {
+    for (
+      let date = new Date(date1.getTime());
+      date < dateLimit;
+      date.setDate(date.getDate() + 1)
+    ) {
       //  year, month, day, hour, minute, second, millisecond
-      const dateAm = new Date(date.getFullYear(), date.getMonth(), date.getDate(), request.hourAm, request.minAm, 0, 0);
-      const datePm = new Date(date.getFullYear(), date.getMonth(), date.getDate(), request.hourPm, request.minPm, 0, 0);
+      const dateAm = new Date(
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate(),
+        request.hourAm,
+        request.minAm,
+        0,
+        0
+      );
+      const datePm = new Date(
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate(),
+        request.hourPm,
+        request.minPm,
+        0,
+        0
+      );
       dateAm.setTime(dateAm.getTime() + request.timezone * 60 * 1000);
       datePm.setTime(datePm.getTime() + request.timezone * 60 * 1000);
 
       const newReqData = {
         txid,
         am: {
-          start: new Date(dateAm.getTime() - deltaMinutes * 60 * 1000).getTime(),
+          start: new Date(
+            dateAm.getTime() - deltaMinutes * 60 * 1000
+          ).getTime(),
           stop: new Date(dateAm.getTime() + deltaMinutes * 60 * 1000).getTime(),
         },
         pm: {
-          start: new Date(datePm.getTime() - deltaMinutes * 60 * 1000).getTime(),
+          start: new Date(
+            datePm.getTime() - deltaMinutes * 60 * 1000
+          ).getTime(),
           stop: new Date(datePm.getTime() + deltaMinutes * 60 * 1000).getTime(),
         },
       };
@@ -56,7 +80,8 @@ exports.lambdaHandler = async (event) => {
 
     const dataAmParams = {
       TableName: 'Readings',
-      KeyConditionExpression: 'txid = :data AND createdAt BETWEEN :start AND :stop',
+      KeyConditionExpression:
+        'txid = :data AND createdAt BETWEEN :start AND :stop',
       ExpressionAttributeValues: {
         ':data': req.txid,
         ':start': parseInt(req.am.start, 10),
@@ -67,7 +92,8 @@ exports.lambdaHandler = async (event) => {
 
     const dataPmParams = {
       TableName: 'Readings',
-      KeyConditionExpression: 'txid = :data AND createdAt BETWEEN :start AND :stop',
+      KeyConditionExpression:
+        'txid = :data AND createdAt BETWEEN :start AND :stop',
       ExpressionAttributeValues: {
         ':data': req.txid,
         ':start': parseInt(req.pm.start, 10),

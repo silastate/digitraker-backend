@@ -1,0 +1,50 @@
+{
+  "txid": {
+    "S": "TEST"
+  },
+  "createdAt": {
+    "N": "1649184811596"
+  },
+  "alarmStatus": {
+    "S": "OK"
+  },
+  "deviceStatus": {
+    "S": "OK"
+  },
+  "channel1": {
+    "S": "4"
+  },
+  "time": {
+    "S": "04:01:24"
+  },
+  "analogIn2": {
+    "S": "0.012"
+  },
+  "analogIn3": {
+    "S": "0.018"
+  },
+  "date": {
+    "S": "2/3/2022"
+  },
+  "analogIn4": {
+    "S": "0.000"
+  },
+  "flowRate": {
+    "S": "1.00"
+  },
+  "sampleTime": {
+    "S": "30"
+  },
+  "analogIn1": {
+    "S": "0.012"
+  },
+  "channel2": {
+    "S": "1"
+  },
+  "channel3": {
+    "S": "1"
+  },
+  "channel4": {
+    "S": "0"
+  }
+}

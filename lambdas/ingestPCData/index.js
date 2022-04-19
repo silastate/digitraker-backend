@@ -5,6 +5,8 @@ AWS.config.update({ region: 'us-east-2' });
 
 const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
 
+const handleAlarms = require('./handleAlarms');
+
 const ingestData = async (data) => {
   const params = {
     TableName: 'ParticleCounterReadings',
@@ -25,8 +27,6 @@ const updateHeartbeat = async (data) => {
       channel4: { N: data?.channel4?.S?.toString() },
     },
   };
-
-  console.log('txid', data?.txid?.S);
 
   const params = {
     TableName: 'ParticleCounterSensors',
@@ -67,6 +67,16 @@ exports.handler = async (event) => {
     body: JSON.stringify(event),
   };
 
+  const pcInfoParams = {
+    TableName: 'ParticleCounterSensors',
+    KeyConditionExpression: 'txid=:txid',
+    ExpressionAttributeValues: {
+      ':txid': { S: event?.txid?.S },
+    },
+  };
+
+  const pcInfo = await dynamo.query(pcInfoParams).promise();
+
   try {
     await ingestData(event);
   } catch (error) {
@@ -77,6 +87,12 @@ exports.handler = async (event) => {
     await updateHeartbeat(event);
   } catch (error) {
     return handleError(error, 'Error updating heartbeat');
+  }
+
+  try {
+    await handleAlarms(dynamo, pcInfo?.Items?.[0]);
+  } catch (error) {
+    return handleError(error, 'Error handling alarms');
   }
 
   return response;

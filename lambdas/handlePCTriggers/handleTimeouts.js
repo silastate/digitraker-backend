@@ -11,25 +11,24 @@ exports.handleTimeout = (sensor, timeoutEscalation, alarms) => {
 
   const delay = parseInt(timeoutEscalation.delay.N, 10) * 60 * 1000; // delay in ms
   const lastHB = parseInt(sensor.lastHeartbeat.N, 10);
+  const now = Date.now();
+  const nowString = now.toString();
 
-  if (timeoutAlarms.length === 0 && lastHB + delay < Date.now()) {
-    alarmMessagesToWrite.push({
-      PutRequest: {
-        Item: {
-          txid: { S: sensor.txid.S },
-          createdAt: { N: Date.now().toString() },
-          closedAt: { N: '-1' },
-          closedBy: { S: '' },
-          message: { S: '' },
-          alarmOn: { BOOL: true },
-          alarmType: { S: 'timeout' },
-          alarmId: { N: Date.now().toString() },
-          escalation: { N: '-1' },
-          lastEscalation: { N: Date.now().toString() },
+  const sendActions = () => {
+    console.log('---- SEND ACTIONS ----');
+    actionsToTake.push({
+      sensor,
+      actions: timeoutActions,
+      alarm: {
+        alarmType: {
+          S: 'timeout',
         },
       },
     });
+  };
 
+  const updateSensor = () => {
+    console.log('---- UPDATE SENSOR ----');
     sensorMessagesToWrite.push({
       PutRequest: {
         Item: {
@@ -40,16 +39,57 @@ exports.handleTimeout = (sensor, timeoutEscalation, alarms) => {
         },
       },
     });
+  };
 
-    actionsToTake.push({
-      sensor,
-      actions: timeoutActions,
-      alarm: {
-        alarmType: {
-          S: 'timeout',
+  const updateAlarm = (alarm) => {
+    console.log('---- UPDATE TIMEOUT ALARM');
+    alarmMessagesToWrite.push({
+      PutRequest: {
+        Item: {
+          ...alarm,
+          lastEscalation: { N: nowString },
         },
       },
     });
+  };
+
+  const createTimeoutAlarm = () => {
+    console.log('---- CREATE TIMEOUT ALARM ----');
+    alarmMessagesToWrite.push({
+      PutRequest: {
+        Item: {
+          txid: { S: sensor.txid.S },
+          createdAt: { N: nowString },
+          closedAt: { N: '-1' },
+          closedBy: { S: '' },
+          message: { S: '' },
+          alarmOn: { BOOL: true },
+          alarmType: { S: 'timeout' },
+          alarmId: { N: nowString },
+          escalation: { N: '-1' },
+          hasEscalation: { BOOL: true },
+          lastEscalation: { N: nowString },
+        },
+      },
+    });
+  };
+
+  if (lastHB + delay < now) {
+    // First escalation
+    if (timeoutAlarms.length === 0) {
+      createTimeoutAlarm();
+      updateSensor();
+      sendActions();
+    }
+
+    // Other escalations
+    const timeoutAlarm = timeoutAlarms[0];
+    const lastEscalation = parseInt(timeoutAlarm?.lastEscalation?.N, 10);
+    if (lastEscalation + delay < now) {
+      updateAlarm(timeoutAlarm);
+      updateSensor();
+      sendActions();
+    }
   }
 
   return {

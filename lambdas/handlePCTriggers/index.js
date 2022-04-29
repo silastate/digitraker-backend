@@ -25,7 +25,11 @@ exports.handler = async () => {
   let actionsToTake = [];
 
   dbSensors.forEach((sensor) => {
-    console.log('sensor foreach---------------', sensor);
+    // console.log('sensor foreach---------------', sensor);
+
+    const parsedSensor = AWS.DynamoDB.Converter.unmarshall(sensor);
+
+    console.log('parsedSensor foreach---------------', parsedSensor.txid);
 
     // -- Handle Timeout
     const timeoutEscalation = getEscalations(
@@ -80,17 +84,60 @@ exports.handler = async () => {
         ...actionsToTake,
       ];
     });
-    //
   });
 
   const response = {
     statusCode: 200,
     body: {
-      alarmMessagesToWrite,
-      sensorMessagesToWrite,
       actionsToTake,
     },
   };
+
+  // Write Alarms
+  if (alarmMessagesToWrite.length > 0) {
+    for (let i = 0; i < alarmMessagesToWrite.length; i += 25) {
+      const params = {
+        RequestItems: {
+          Alarms: alarmMessagesToWrite.slice(i, i + 25),
+        },
+      };
+
+      console.log('alarmMessagesToWrite - Params', params);
+      await dynamo
+        .batchWriteItem(params, (err, data) => {
+          if (err) {
+            console.log('alarmMessagesToWrite - Error', err);
+          } else {
+            console.log('alarmMessagesToWrite - Success', data);
+          }
+        })
+        .promise();
+    }
+  }
+
+  // Update Sensors
+  if (sensorMessagesToWrite.length > 0) {
+    console.log('sensorMessagesToWrite', sensorMessagesToWrite);
+
+    for (let i = 0; i < sensorMessagesToWrite.length; i += 25) {
+      const params = {
+        RequestItems: {
+          ParticleCounterSensors: sensorMessagesToWrite.slice(i, i + 25),
+        },
+      };
+
+      console.log('sensorMessagesToWrite - Params', params);
+      await dynamo
+        .batchWriteItem(params, (err, data) => {
+          if (err) {
+            console.log('sensorMessagesToWrite - Error ', err);
+          } else {
+            console.log('sensorMessagesToWrite - Success', data);
+          }
+        })
+        .promise();
+    }
+  }
 
   return response;
 };

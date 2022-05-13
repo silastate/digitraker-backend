@@ -77,6 +77,8 @@ exports.handler = async (event) => {
 
   const pcInfo = await dynamo.query(pcInfoParams).promise();
 
+  console.log('Receiving Data from -> ', event?.txid?.S);
+  
   try {
     await ingestData(event);
   } catch (error) {

@@ -114,10 +114,8 @@ module.exports = async (dynamo, data) => {
   const params = {
     TableName: 'Alarms',
     KeyConditionExpression: 'txid=:txid',
-    FilterExpression: 'hasEscalation = :hasEscalation',
     ExpressionAttributeValues: {
       ':txid': { S: txid },
-      ':hasEscalation': { BOOL: false },
     },
   };
 
@@ -125,7 +123,7 @@ module.exports = async (dynamo, data) => {
 
   const { heartbeats, rangeMaxAll } = parsedData;
 
-  const hasAlarm = alarms.Count !== 0;
+  const hasAlarm = !!alarms?.Items?.length !== 0;
   const isOutRange = checkIfIsOutRange(heartbeats, rangeMaxAll);
 
   console.log('hasAlarm', hasAlarm);

@@ -5,7 +5,7 @@ AWS.config.update({ region: 'us-east-2' });
 
 const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
 // const lambda = new AWS.Lambda();
-const { getEscalations } = require('./utils');
+const { getEscalations, isOnSchedule } = require('./utils');
 const { handleTimeout } = require('./handleTimeouts');
 const { handleAlarms } = require('./handleAlarms');
 const { handleActions } = require('./handleActions');
@@ -28,12 +28,18 @@ exports.handler = async () => {
   dbSensors.forEach((sensor) => {
     const parsedSensor = AWS.DynamoDB.Converter.unmarshall(sensor);
 
+    console.log('---------------------------------------------------------');
+    console.log('Processing Sensor =>', parsedSensor.txid);
+
     if (parsedSensor?.onHold) {
       console.log('SENSOR ON HOLD:', parsedSensor.txid);
       return;
     }
 
-    console.log('Processing Sensor =>', parsedSensor.txid);
+    if (!isOnSchedule(parsedSensor?.schedule)) {
+      console.log('SENSOR OUT OF SCHEDULE:', parsedSensor.txid);
+      return;
+    }
 
     // -- Handle Timeout
     const timeoutEscalation = getEscalations(
@@ -90,6 +96,8 @@ exports.handler = async () => {
     });
   });
 
+  console.log('-------------------------------------------------------------');
+
   await handleActions(actionsToTake);
 
   const response = {
@@ -144,6 +152,8 @@ exports.handler = async () => {
         .promise();
     }
   }
+
+  console.log('--------------------------- END ------------------------------');
 
   return response;
 };

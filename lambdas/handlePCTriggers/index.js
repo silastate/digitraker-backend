@@ -8,6 +8,7 @@ const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
 const { getEscalations } = require('./utils');
 const { handleTimeout } = require('./handleTimeouts');
 const { handleAlarms } = require('./handleAlarms');
+const { handleActions } = require('./handleActions');
 
 const {
   dbGetAlarms,
@@ -25,11 +26,14 @@ exports.handler = async () => {
   let actionsToTake = [];
 
   dbSensors.forEach((sensor) => {
-    // console.log('sensor foreach---------------', sensor);
-
     const parsedSensor = AWS.DynamoDB.Converter.unmarshall(sensor);
 
-    console.log('parsedSensor foreach---------------', parsedSensor.txid);
+    if (parsedSensor?.onHold) {
+      console.log('SENSOR ON HOLD:', parsedSensor.txid);
+      return;
+    }
+
+    console.log('Processing Sensor =>', parsedSensor.txid);
 
     // -- Handle Timeout
     const timeoutEscalation = getEscalations(
@@ -86,6 +90,8 @@ exports.handler = async () => {
     });
   });
 
+  await handleActions(actionsToTake);
+
   const response = {
     statusCode: 200,
     body: {
@@ -102,7 +108,7 @@ exports.handler = async () => {
         },
       };
 
-      console.log('alarmMessagesToWrite - Params', params);
+      console.log('alarmMessagesToWrite - Params', JSON.stringify(params));
       await dynamo
         .batchWriteItem(params, (err, data) => {
           if (err) {
@@ -126,7 +132,7 @@ exports.handler = async () => {
         },
       };
 
-      console.log('sensorMessagesToWrite - Params', params);
+      console.log('sensorMessagesToWrite - Params', JSON.stringify(params));
       await dynamo
         .batchWriteItem(params, (err, data) => {
           if (err) {

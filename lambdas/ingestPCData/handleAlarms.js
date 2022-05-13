@@ -124,7 +124,8 @@ module.exports = async (dynamo, data) => {
   };
 
   const alarms = await dynamo.query(params).promise();
-  const openAlarms = alarms?.Items?.filter((alarm) => !!alarm?.closedAt) || [];
+  const openAlarms =
+    alarms?.Items?.filter((alarm) => alarm?.closedAt?.N === -1) || [];
   const { heartbeats, rangeMaxAll } = parsedData;
 
   const hasAlarm = !!openAlarms?.length;

@@ -6,6 +6,7 @@ const checkIfIsOutRange = (heartbeats, rangeMaxAll) =>
     .includes(true);
 
 const updateSensorAlarmOn = async (dynamo, txid) => {
+  console.log('updateSensorAlarmOn');
   const updateSensorParams = {
     TableName: 'ParticleCounterSensors',
     Key: {
@@ -34,6 +35,7 @@ const updateSensorAlarmOn = async (dynamo, txid) => {
 };
 
 const updateSensorAlarmOff = async (dynamo, txid) => {
+  console.log('updateSensorAlarmOff');
   const updateSensorParams = {
     TableName: 'ParticleCounterSensors',
     Key: {
@@ -62,6 +64,7 @@ const updateSensorAlarmOff = async (dynamo, txid) => {
 };
 
 const createAlarm = async (dynamo, txid) => {
+  console.log('createAlarm');
   const createAlarmParams = {
     TableName: 'Alarms',
     Item: {
@@ -89,6 +92,7 @@ const createAlarm = async (dynamo, txid) => {
 };
 
 const deleteAlarm = async (dynamo, txid, alarmId) => {
+  console.log('deleteAlarm');
   const createAlarmParams = {
     TableName: 'Alarms',
     Key: {
@@ -120,10 +124,10 @@ module.exports = async (dynamo, data) => {
   };
 
   const alarms = await dynamo.query(params).promise();
-
+  const openAlarms = alarms?.Items?.filter((alarm) => !!alarm?.closedAt) || [];
   const { heartbeats, rangeMaxAll } = parsedData;
 
-  const hasAlarm = !!alarms?.Items?.length !== 0;
+  const hasAlarm = !!openAlarms?.length;
   const isOutRange = checkIfIsOutRange(heartbeats, rangeMaxAll);
 
   console.log('hasAlarm', hasAlarm);

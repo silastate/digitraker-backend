@@ -63,10 +63,9 @@ const isBetweenSchedule = (nowTime, scheduleType) => {
 exports.isBetweenSchedule = isBetweenSchedule;
 
 exports.isOnSchedule = (schedule) => {
-  const now = formatInTimeZone(new Date(), schedule.timezone, 'i-HH:mm')?.split(
+  const now = formatInTimeZone(Date.now(), schedule.timezone, 'i-HH:mm')?.split(
     '-'
   );
-
   const nowWeekDay = now[0];
   const nowTime = now[1];
 

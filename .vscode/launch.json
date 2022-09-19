@@ -3,6 +3,21 @@
     {
       "type": "aws-sam",
       "request": "direct-invoke",
+      "name": "updateClientHeartbeat:index.handler (nodejs16.x)",
+      "invokeTarget": {
+        "target": "code",
+        "projectRoot": "${workspaceFolder}/lambdas/updateClientHeartbeat",
+        "lambdaHandler": "index.handler"
+      },
+      "lambda": {
+        "runtime": "nodejs16.x",
+        "payload": {},
+        "environmentVariables": {}
+      }
+    },
+    {
+      "type": "aws-sam",
+      "request": "direct-invoke",
       "name": "generateAlarmReport-function-oyzGRfgNgUdY:app.lambdaHandler (nodejs14.x)",
       "invokeTarget": {
         "target": "code",

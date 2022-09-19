@@ -6,6 +6,21 @@
       "name": "generateAlarmReport-function-oyzGRfgNgUdY:app.lambdaHandler (nodejs14.x)",
       "invokeTarget": {
         "target": "code",
+        "projectRoot": "${workspaceFolder}/lambdas/generateAlarmReport-function-oyzGRfgNgUdY",
+        "lambdaHandler": "app.lambdaHandler"
+      },
+      "lambda": {
+        "runtime": "nodejs14.x",
+        "payload": {},
+        "environmentVariables": {}
+      }
+    },
+    {
+      "type": "aws-sam",
+      "request": "direct-invoke",
+      "name": "generateAlarmReport-function-oyzGRfgNgUdY:app.lambdaHandler (nodejs14.x)",
+      "invokeTarget": {
+        "target": "code",
         "projectRoot": "${workspaceFolder}/generateAlarmReport-function-oyzGRfgNgUdY",
         "lambdaHandler": "app.lambdaHandler"
       },

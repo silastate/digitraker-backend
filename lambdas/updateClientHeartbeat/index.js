@@ -27,24 +27,29 @@ exports.handler = async (event) => {
     reading_array = input.message.payload.channel;
   }
 
-  //heartbeat:number
-  //lastHeartbeat:number
+  const clientId = input['client-id'].split('-')[0];
 
-  // console.log("CLIENT NAME: ", input["client-id"].split("-")[0]);
   const requests_params = await reading_array.map(() => {
     const params = {
       TableName: 'Gateways',
       Key: {
-        gatewayId: { S: input['client-id'].split('-')[0] },
+        gatewayId: { S: clientId },
       },
       ExpressionAttributeNames: {
         '#lhb': 'lastHeartbeat',
         '#ts': 'timestamp',
+        '#deleted': 'deleted',
+        '#alarmOn': 'alarmOn',
+        '#clientId': 'clientId',
       },
-      UpdateExpression: 'set #lhb = :lh, #ts = :ts',
+      UpdateExpression:
+        'set #lhb = :lh, #ts = :ts, #deleted = :deleted, #clientId = :clientId, #alarmOn = :alarmOn',
       ExpressionAttributeValues: {
         ':lh': { N: new Date(input.timestamp).getTime().toString() },
         ':ts': { S: input.timestamp },
+        ':deleted': { BOOL: false },
+        ':alarmOn': { BOOL: false },
+        ':clientId': { S: clientId },
       },
       ReturnValues: 'ALL_NEW',
     };

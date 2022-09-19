@@ -15,14 +15,13 @@ const HEADERS = {
 
 exports.lambdaHandler = async (event) => {
   try {
-    const payload = JSON.parse(event.body);
+    const payload = !!event?.body?.txids ? event.body : JSON.parse(event.body);
 
     console.log('Payload', payload);
 
     const params = {
       TableName: 'Alarms',
-      FilterExpression:
-        'contains(:txids, #txid) AND alarmId BETWEEN :start AND :stop',
+      FilterExpression: 'contains(:txids, #txid) AND alarmId BETWEEN :start AND :stop',
       ExpressionAttributeNames: { '#txid': 'txid' },
       ExpressionAttributeValues: {
         ':txids': payload.txids,
@@ -32,15 +31,22 @@ exports.lambdaHandler = async (event) => {
     };
 
     const results = await dynamo.scan(params).promise();
-
+    
+    console.log('RESULT', results);
+    
     const response = {
-      statusCode: 200,
-      headers: HEADERS,
-      body: JSON.stringify(results),
+        statusCode: 200,
+        headers: {
+            "Access-Control-Allow-Headers" : "Content-Type",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "OPTIONS,POST,GET"
+        },
+        body: JSON.stringify(results),
     };
-
+    
     return response;
   } catch (err) {
+      console.log('ERR', err);
     const error = {
       statusCode: 400,
       headers: HEADERS,

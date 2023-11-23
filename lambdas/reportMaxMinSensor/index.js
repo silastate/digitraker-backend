@@ -10,6 +10,7 @@ exports.handler = async (event) => {
 
   try {
     console.log('event', event);
+    console.log('Testing ..');
 
     const payload = event?.txid ? event : JSON.parse(event);
 

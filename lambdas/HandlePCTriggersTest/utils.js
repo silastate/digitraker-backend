@@ -1,12 +1,8 @@
 'use strict';
-//const AWS = require('aws-sdk');
 
-//AWS.config.update({ region: 'us-east-2' });
-//const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
-
+const { formatInTimeZone } = require('date-fns-tz');
 
 exports.getEscalations = (escalations, sensorEscalationIds) => {
-      console.log("getEscalations sensorEscalationIds");
   if (!sensorEscalationIds || !sensorEscalationIds.L.length) return [];
 
   const parsedIds = sensorEscalationIds.L.map((item) => item.S);
@@ -34,13 +30,7 @@ const recursiveScan = (dynamo, params, aItems = []) => {
       if (data.LastEvaluatedKey != null) {
         params.ExclusiveStartKey = data.LastEvaluatedKey;
         //  Recursive call, as deep as we can loop !
-        // commenting this line to torubleshoot 12/13/2023 issue.
-        console.log("Utils recursiveScan");
-        if (params === undefined || aItems === undefined) {
-          return;
-        }else {
-           return recursiveScan(dynamo, params, aItems);
-        }
+        return recursiveScan(params, aItems);
       }
 
       return Promise.resolve(aItems);
@@ -56,5 +46,44 @@ const recursiveScan = (dynamo, params, aItems = []) => {
       console.log(JSON.stringify(error));
     });
 };
-
 exports.recursiveScan = recursiveScan;
+
+const isBetweenSchedule = (nowTime, scheduleType) => {
+  const weekdaySchedule = scheduleType?.split('-');
+  const initTime = weekdaySchedule[0];
+  const endTime = weekdaySchedule[1];
+
+  if (nowTime >= initTime && nowTime <= endTime) {
+    return true;
+  }
+
+  return false;
+};
+
+exports.isBetweenSchedule = isBetweenSchedule;
+
+exports.isOnSchedule = (schedule) => {
+  const now = formatInTimeZone(new Date(), schedule.timezone, 'i-HH:mm')?.split(
+    '-'
+  );
+
+  const nowWeekDay = now[0];
+  const nowTime = now[1];
+
+  console.log('nowWeekDay', nowWeekDay);
+  console.log('nowTime', nowTime);
+
+  if (nowWeekDay >= 1 && nowWeekDay < 6 && schedule.weekday !== 'off') {
+    return isBetweenSchedule(nowTime, schedule.weekday);
+  }
+
+  if (nowWeekDay === '6' && schedule.saturday !== 'off') {
+    return isBetweenSchedule(nowTime, schedule.saturday);
+  }
+
+  if (nowWeekDay === '7' && schedule.sunday !== 'off') {
+    return isBetweenSchedule(nowTime, schedule.sunday);
+  }
+
+  return false;
+};

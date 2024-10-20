@@ -10,12 +10,18 @@ const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
 const lambda = new AWS.Lambda();
 
 const handleTimeout = (sensor, timeoutEscalation, alarms) => {
-  // console.log("HANDLETIMEOUT", sensor.txid.S)
+   console.log("**HANDLETIMEOUT", sensor.txid.S)
 
   const timeoutActions = timeoutEscalation.actions.L.map((action) => action.M);
-  const timeoutAlarms = alarms.filter(
-    (a) => a.txid.S === sensor.txid.S && a.alarmType.S === 'timeout'
-  );
+   console.log("**HANDLETIMEOUT1", sensor.txid.S)
+
+   console.log("***HANDLETIMEOUT1", alarms)
+   
+   const timeoutAlarms = alarms.filter(
+      (a) => a.txid.S === sensor.txid.S && a.alarmType.S === 'timeout'
+    );
+
+   console.log("**HANDLETIMEOUT2", sensor.txid.S)
 
   const alarmMessagesToWrite = [];
   const actionsToTake = [];
@@ -24,6 +30,7 @@ const handleTimeout = (sensor, timeoutEscalation, alarms) => {
   const delay = parseInt(timeoutEscalation.delay.N, 10) * 60 * 1000; // delay in ms
   const lastHB = parseInt(sensor.lastHeartbeat.N, 10);
 
+   console.log("**timeoutAlarms.length", timeoutAlarms.length)
   if (timeoutAlarms.length === 0 && lastHB + delay < Date.now()) {
     alarmMessagesToWrite.push({
       PutRequest: {
@@ -69,9 +76,11 @@ const handleTimeout = (sensor, timeoutEscalation, alarms) => {
     actionsToTake,
     sensorMessagesToWrite,
   };
+  
 };
 
 const handleAlarms = (sensor, escalations, alarmParam) => {
+  console.log("**thandleAlarms")
   const alarm = alarmParam;
 
   const alarmMessagesToWrite = [];
@@ -141,6 +150,7 @@ const handleAlarms = (sensor, escalations, alarmParam) => {
 };
 
 module.exports = async (sensors) => {
+   console.log("**QUERY ALARM")
   const alarms = await recursiveScan(dynamo, {
     TableName: 'Alarms',
     FilterExpression: 'alarmOn = :o',
@@ -148,7 +158,7 @@ module.exports = async (sensors) => {
       ':o': { BOOL: true },
     },
   });
-
+   console.log("**QUERY ALARM 1", alarms)
   const escalationTable = await recursiveScan(dynamo, {
     TableName: 'Escalation',
     FilterExpression:
@@ -180,10 +190,11 @@ module.exports = async (sensors) => {
 
   await Promise.all(
     sensors.map(async (sensor) => {
+      
       const onHold = sensor.onHold ? sensor.onHold.BOOL : false;
       const sensorGatewayInAlarm = alarmGateways.includes(sensor.gateway?.S);
+   console.log("**onHold",onHold)
 
-      console.log('sensorGatewayInAlarm', sensor, sensorGatewayInAlarm);
 
       if (!onHold && !sensorGatewayInAlarm) {
         // --- Get Sensor escalations;
@@ -201,8 +212,10 @@ module.exports = async (sensors) => {
           sensor.escalationsTimeout
         );
 
+   console.log("**calling handleTimeout",alarms)
+
         if (timeoutEscalation && timeoutEscalation.length > 0) {
-          const timeoutMessageAndActions = handleTimeout(
+         const timeoutMessageAndActions = handleTimeout(
             sensor,
             timeoutEscalation[0],
             alarms

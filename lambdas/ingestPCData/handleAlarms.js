@@ -124,10 +124,11 @@ module.exports = async (dynamo, data) => {
   };
 
   const alarms = await dynamo.query(params).promise();
-  const openAlarms =
-    alarms?.Items?.filter((alarm) => alarm?.closedAt?.N === -1) || [];
+  const openAlarms = alarms?.Items?.filter((alarm) => alarm?.closedAt?.N === '-1') || [];
   const { heartbeats, rangeMaxAll } = parsedData;
 
+  console.log('alarms', alarms?.Items[0]?.closedAt);
+  console.log('openAlarms', openAlarms);
   const hasAlarm = !!openAlarms?.length;
   const isOutRange = checkIfIsOutRange(heartbeats, rangeMaxAll);
 

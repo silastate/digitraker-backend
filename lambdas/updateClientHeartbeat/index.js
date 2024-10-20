@@ -3,7 +3,7 @@ AWS.config.update({ region: 'us-east-2' });
 
 const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
 
-exports.handler = async (event) => {
+exports.handler = async event => {
   let decode = Buffer.from(event.data, 'base64').toString('ascii');
   if (decode == '[]') return JSON.stringify('{}', null, 2);
 
@@ -31,30 +31,33 @@ exports.handler = async (event) => {
   //lastHeartbeat:number
 
   // console.log("CLIENT NAME: ", input["client-id"].split("-")[0]);
+  
+  // TODO: Add all filters here
   const requests_params = await reading_array.map(() => {
     const params = {
       TableName: 'Gateways',
       Key: {
-        gatewayId: { S: input['client-id'].split('-')[0] },
+        gatewayId: { S: input['client-id'].split('-')[0] }
       },
       ExpressionAttributeNames: {
         '#lhb': 'lastHeartbeat',
-        '#ts': 'timestamp',
+        '#ts': 'timestamp'
       },
       UpdateExpression: 'set #lhb = :lh, #ts = :ts',
       ExpressionAttributeValues: {
         ':lh': { N: new Date(input.timestamp).getTime().toString() },
-        ':ts': { S: input.timestamp },
+        ':ts': { S: input.timestamp }
       },
-      ReturnValues: 'ALL_NEW',
+      ReturnValues: 'ALL_NEW'
     };
+    
     return params;
   });
 
   console.log(requests_params);
 
   if (requests_params.length > 0) {
-    const promises = requests_params.map(async (params) => {
+    const promises = requests_params.map(async params => {
       console.log('Adding a new DATA ENTRY...');
       // console.log("Writing data: " + JSON.stringify(params, null, 2))
       return dynamo

@@ -5,12 +5,10 @@ const AWS = require('aws-sdk');
 AWS.config.update({ region: 'us-east-2' });
 
 const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
+//const dynamo = new AWS.DynamoDB();
 
-const version100 = require('./version100');
 const version200 = require('./version200');
-
-const CLIENTS_USING_NEW_ALARMS = ['Auburn', 'DrVince', 'HealthCare', 'Lexington', 'VistarKC'];
-
+console.log("Final List 11: " );
 const recursiveScan = (dynamo, params, aItems = []) => {
   return dynamo
     .scan(params)
@@ -22,6 +20,7 @@ const recursiveScan = (dynamo, params, aItems = []) => {
       });
 
       aItems = [...aItems, ...newItems];
+console.log("Final List 12: " );
 
       if (data.LastEvaluatedKey != null) {
         params.ExclusiveStartKey = data.LastEvaluatedKey;
@@ -53,22 +52,7 @@ exports.handler = async () => {
     },
   });
 
-  const sensorsV100 = sensors.filter(
-    (s) => !CLIENTS_USING_NEW_ALARMS.includes(s.clientId.S)
-  );
-  const sensorsV200 = sensors.filter((s) =>
-    CLIENTS_USING_NEW_ALARMS.includes(s.clientId.S)
-  );
-
-  const responseV100 = await version100(sensorsV100);
-  console.log('responseV100', responseV100);
-
-  const responseV200 = await version200(sensorsV200);
-  console.log('responseV200', responseV200);
-
-  const response = {
-    statusCode: 200,
-  };
+  const response = await version200(sensors);
 
   return response;
 };

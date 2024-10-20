@@ -5,83 +5,6 @@ const lambda = new AWS.Lambda();
 
 const utils = require('./utils');
 
-module.exports = async (dynamo, { gatewayTable, escalationTable }) => {
-  const alarmGateways = [];
-  let gatewayMessageToWrite = [];
-
-  await Promise.all(
-    gatewayTable.map(async (gateway) => {
-      const escalation = utils.getEscalations(
-        escalationTable,
-        gateway.escalationsTimeout
-      );
-      const timeoutEscalation =
-        escalation && escalation.length > 0 ? escalation[0] : null;
-
-      if (timeoutEscalation) {
-        const now = new Date().getTime();
-        const diff = now - gateway.lastHeartbeat.N;
-        const diffMinutes = Math.floor(diff / 1000 / 60);
-        const timeoutDelay = timeoutEscalation.delay
-          ? timeoutEscalation.delay.N
-          : 60;
-        const gatewayIsOnTimeout = diffMinutes > timeoutDelay;
-
-        if (gatewayIsOnTimeout) {
-          alarmGateways.push(gateway.gatewayId);
-          const handleGatewayActions = await handleGateway(
-            gateway,
-            timeoutEscalation
-          );
-          gatewayMessageToWrite = [
-            ...gatewayMessageToWrite,
-            ...handleGatewayActions.gatewayMessageToWrite,
-          ];
-        }
-
-        if (!gatewayIsOnTimeout && gateway?.alarmOn?.BOOL) {
-          // RESET THE ALARM ON THE GATEWAY
-          gatewayMessageToWrite.push({
-            PutRequest: {
-              Item: {
-                ...gateway,
-                alarmOn: { BOOL: false },
-                deleted: { BOOL: false },
-                alarmLastAction: { N: '0' },
-              },
-            },
-          });
-        }
-      }
-    })
-  );
-
-  if (gatewayMessageToWrite.length) {
-    const gatewayParams = {
-      RequestItems: {
-        Gateways: gatewayMessageToWrite,
-      },
-    };
-
-    console.log('gatewayParams', JSON.stringify(gatewayParams));
-    await dynamo
-      .batchWriteItem(gatewayParams, (err, data) => {
-        if (err) {
-          console.log('gatewayMessageToWrite - Error ', err);
-        } else {
-          console.log('gatewayMessageToWrite - Success', data);
-        }
-      })
-      .promise();
-  }
-
-  if (alarmGateways?.length) {
-    return alarmGateways.map((gateway) => gateway.S);
-  }
-
-  return [];
-};
-
 const handleGateway = async (gateway, escalation) => {
   const gatewayMessageToWrite = [];
 
@@ -231,4 +154,81 @@ const handleVoiceActions = async (gateway, actions) => {
   } catch (err) {
     console.log('CATCH ClickSend Integration', err);
   }
+};
+
+module.exports = async (dynamo, { gatewayTable, escalationTable }) => {
+  const alarmGateways = [];
+  let gatewayMessageToWrite = [];
+
+  await Promise.all(
+    gatewayTable.map(async (gateway) => {
+      const escalation = utils.getEscalations(
+        escalationTable,
+        gateway.escalationsTimeout
+      );
+      const timeoutEscalation =
+        escalation && escalation.length > 0 ? escalation[0] : null;
+
+      if (timeoutEscalation) {
+        const now = new Date().getTime();
+        const diff = now - gateway.lastHeartbeat.N;
+        const diffMinutes = Math.floor(diff / 1000 / 60);
+        const timeoutDelay = timeoutEscalation.delay
+          ? timeoutEscalation.delay.N
+          : 60;
+        const gatewayIsOnTimeout = diffMinutes > timeoutDelay;
+
+        if (gatewayIsOnTimeout) {
+          alarmGateways.push(gateway.gatewayId);
+          const handleGatewayActions = await handleGateway(
+            gateway,
+            timeoutEscalation
+          );
+          gatewayMessageToWrite = [
+            ...gatewayMessageToWrite,
+            ...handleGatewayActions.gatewayMessageToWrite,
+          ];
+        }
+
+        if (!gatewayIsOnTimeout && gateway?.alarmOn?.BOOL) {
+          // RESET THE ALARM ON THE GATEWAY
+          gatewayMessageToWrite.push({
+            PutRequest: {
+              Item: {
+                ...gateway,
+                alarmOn: { BOOL: false },
+                deleted: { BOOL: false },
+                alarmLastAction: { N: '0' },
+              },
+            },
+          });
+        }
+      }
+    })
+  );
+
+  if (gatewayMessageToWrite.length) {
+    const gatewayParams = {
+      RequestItems: {
+        Gateways: gatewayMessageToWrite,
+      },
+    };
+
+    console.log('gatewayParams', JSON.stringify(gatewayParams));
+    await dynamo
+      .batchWriteItem(gatewayParams, (err, data) => {
+        if (err) {
+          console.log('gatewayMessageToWrite - Error ', err);
+        } else {
+          console.log('gatewayMessageToWrite - Success', data);
+        }
+      })
+      .promise();
+  }
+
+  if (alarmGateways?.length) {
+    return alarmGateways.map((gateway) => gateway.S);
+  }
+
+  return [];
 };

@@ -10,7 +10,6 @@ exports.handler = async (event) => {
 
   try {
     console.log('event', event);
-    console.log('Testing ..');
 
     const payload = event?.txid ? event : JSON.parse(event);
 
@@ -32,6 +31,7 @@ exports.handler = async (event) => {
         .toLocaleString('en-US', { timeZone: 'EST' })
         .substring(0, 9);
     });
+
 
     const wideValues = Object.values(groupedByDay).map((day) => ({
       max: _.maxBy(day, (reading) => reading.value),

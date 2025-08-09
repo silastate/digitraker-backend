@@ -1,9 +1,18 @@
 'use strict';
+//const AWS = require('aws-sdk');
+
+//AWS.config.update({ region: 'us-east-2' });
+//const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
+
 
 exports.getEscalations = (escalations, sensorEscalationIds) => {
+      console.log("getEscalations sensorEscalationIds");
   if (!sensorEscalationIds || !sensorEscalationIds.L.length) return [];
 
   const parsedIds = sensorEscalationIds.L.map((item) => item.S);
+ 
+  //DDW 11/21
+  console.log("ParsedIDs", parsedIds);
 
   return escalations.reduce((acc, value) => {
     if (parsedIds.includes(value.id.S)) {
@@ -12,6 +21,7 @@ exports.getEscalations = (escalations, sensorEscalationIds) => {
     return acc;
   }, []);
 };
+
 
 const recursiveScan = (dynamo, params, aItems = []) => {
   return dynamo
@@ -28,7 +38,13 @@ const recursiveScan = (dynamo, params, aItems = []) => {
       if (data.LastEvaluatedKey != null) {
         params.ExclusiveStartKey = data.LastEvaluatedKey;
         //  Recursive call, as deep as we can loop !
-        return recursiveScan(params, aItems);
+        // commenting this line to torubleshoot 12/13/2023 issue.
+        console.log("Utils recursiveScan");
+        if (params === undefined || aItems === undefined) {
+          return;
+        }else {
+           return recursiveScan(dynamo, params, aItems);
+        }
       }
 
       return Promise.resolve(aItems);

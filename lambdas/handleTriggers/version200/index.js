@@ -11,6 +11,31 @@ const lambda = new AWS.Lambda();
 
 const handleTimeout = (sensor, timeoutEscalation, alarms) => {
   // console.log("HANDLETIMEOUT", sensor.txid.S)
+  if (!sensor) {
+    console.log('WARNING: Sensor is undefined in handleTimeout');
+    return {
+      alarmMessagesToWrite: [],
+      actionsToTake: [],
+      sensorMessagesToWrite: [],
+    };
+  }
+  if (!timeoutEscalation) {
+    console.log(`WARNING: No timeout escalation configured for sensor ${sensor.txid?.S}`);
+    return {
+      alarmMessagesToWrite: [],
+      actionsToTake: [],
+      sensorMessagesToWrite: [],
+    };
+  }
+
+  if (!timeoutEscalation.actions) {
+    console.log(`WARNING: No actions configured in timeout escalation for sensor ${sensor.txid?.S}`);
+    return {
+      alarmMessagesToWrite: [],
+      actionsToTake: [],
+      sensorMessagesToWrite: [],
+    };
+  }
 
   const timeoutActions = timeoutEscalation.actions.L.map((action) => action.M);
   const timeoutAlarms = alarms.filter(
@@ -314,16 +339,13 @@ module.exports = async (sensors) => {
       Message: {
         Body: {
           Text: {
-            Data: `${unit.sensor.name.S} (${unit.sensor.txid.S}) located at ${
-              unit.sensor.location.S
-            } has a pending an ${alarmType} alarm (Gateway: ${
-              unit.sensor.clientId.S
-            }). You can view the sensor by going to http://app.digitraker.com/dashboard/${unit.sensor.location.S.replace(
-              / /g,
-              '%20'
-            )}/${
-              unit.sensor.txid.S
-            } and check the alarm pending. \n\nIf you have any concerns, you can reach out to us at http://www.digitraker.com.\n
+            Data: `${unit.sensor.name.S} (${unit.sensor.txid.S}) located at ${unit.sensor.location.S
+              } has a pending an ${alarmType} alarm (Gateway: ${unit.sensor.clientId.S
+              }). You can view the sensor by going to http://app.digitraker.com/dashboard/${unit.sensor.location.S.replace(
+                / /g,
+                '%20'
+              )}/${unit.sensor.txid.S
+              } and check the alarm pending. \n\nIf you have any concerns, you can reach out to us at http://www.digitraker.com.\n
 Sensor: ${unit.sensor.name.S} (${unit.sensor.txid.S})
 Location: ${unit.sensor.location.S} (Gateway: ${unit.sensor.clientId.S})
 Alarm: ${alarmType}
@@ -333,9 +355,8 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
           },
         },
         Subject: {
-          Data: `[${alarmType.toUpperCase()}] ${unit.sensor.name.S} at ${
-            unit.sensor.location.S
-          }.`,
+          Data: `[${alarmType.toUpperCase()}] ${unit.sensor.name.S} at ${unit.sensor.location.S
+            }.`,
         },
       },
       Source: 'no-reply@digitraker.com',
@@ -416,10 +437,9 @@ Last Value: ${value.toFixed(2)}${unit.sensor.unit.S}`,
       // const formatedCreatedAt = formatDate(unit.alarm.createdAt.N);
 
       smsList.push({
-        Message: `${
-          new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }) +
+        Message: `${new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }) +
           ' CST'
-        }
+          }
 Sensor: ${unit.sensor.name.S} (${unit.sensor.txid.S})
 Location: ${unit.sensor.location.S} (Gateway: ${unit.sensor.clientId.S})
 Alarm: ${alarmType}

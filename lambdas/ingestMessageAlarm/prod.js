@@ -1,7 +1,10 @@
+'use strict';
+
 var AWS = require('aws-sdk');
 AWS.config.update({ region: 'us-east-2' });
 
 var dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
+const dataparsersdk = require('./lib')
 
 const cleanExtraAlarms = (alarmsOn) => {
   const allAlarmTypes = ['outRange', 'tamper', 'lowBattery', 'timeout'];
@@ -71,15 +74,28 @@ exports.handler = async (event) => {
   // if(!( auburn || healthcare || aurora || dallas || ellsworth || olathelab)) return;
 
   var request_data = [];
-  var reading_array;
+  var reading_array = [];
 
   var pressure = false;
+  let newPressure = false;
 
   if ('data' in input.message.payload) {
     reading_array = input.message.payload.data;
   } else if ('channel' in input.message.payload) {
     reading_array = input.message.payload.channel;
     pressure = true;
+    newPressure = false;
+  }else if ('serialData' in input.message.payload) {
+    console.log('input:', input);
+    //readingArray = input.message.payload.channel;
+    const parsedDataResp = dataparsersdk.parseData(input.message.payload.serialData)
+    console.log("parsedDataResp--------> ",parsedDataResp);
+    
+    reading_array[0] = parsedDataResp.channel1;
+    reading_array[1] = parsedDataResp.channel2;
+    console.log("reading_array: ", reading_array);
+    pressure = true;
+    newPressure = true;
   }
 
   // console.log(JSON.stringify(input, null, 2))
@@ -144,7 +160,7 @@ exports.handler = async (event) => {
         case '%':
           break;
         case 'WC':
-          if (pressure && item !== -9999) {
+          if ((pressure && !newPressure) && item !== -9999) {
             var coef = parseFloat(info.coef.N);
             item = 0.015625 * (item - 4) + coef; // positive equation
             // item = 0.015625 * (item - 4); // positive equation
@@ -158,6 +174,32 @@ exports.handler = async (event) => {
           console.log(txid + ' doesnt have unit configuration');
       }
 
+      let a = 1.46717E-03;
+      let B = 2.38452E-04;
+      let C = 0.000000100399;
+      let K = 273.15;
+
+      let ultraTxids = ['4643665_1','4345080_1','3959378_1','3958810_1','3957966_1','3956362_1','3958769_1','4344126_1'];
+     // ultraTxids.includes(txid);
+      console.log('ultraTxids contains:', ultraTxids.includes(txid));
+     //if (txid === '4643665_1') {
+     if(ultraTxids.includes(txid)){
+      console.log(txid, 'input:', input.message.payload.data);
+      
+      item = (item * 500000)/(500000 - item);
+      console.log('Rprobe value:', item);
+     
+      let b = (B * Math.log(item));
+      let c = (C * Math.pow(Math.log(item),3));
+      
+      console.log("Pre T ----->",((a+b+c)));
+
+      item = ((1/(a+b+c)) - K);
+      console.log("Final T ----->",item);
+      item = item * 9/5 + 32;
+      console.log("Final item ----->",item);
+
+    }
       if (txid == '1832402_1') {
         item += -9;
       }
@@ -171,13 +213,18 @@ exports.handler = async (event) => {
         outRange = true;
       }
       // low battery alarm
-      if (input.message.payload.status.lowBattery === true) {
+      if(newPressure){
+        const parsedDataResp = dataparsersdk.parseData(input.message.payload.serialData)
+        console.log("isBatteryAlert parsedDataResp--------> ",parsedDataResp);       
+        battery = parsedDataResp.isBatteryAlert;           
+        console.log("isBatteryAlert--------> ",battery);       
+      }else if (input.message.payload.status.lowBattery === true) {
         // console.log("BATTERY")
         battery = true;
       }
 
       // tamper alarm
-      if (input.message.payload.status.tamper === true) {
+      if (!newPressure && input.message.payload.status.tamper === true) {
         // console.log("TAMPER")
         tamper = true;
       }

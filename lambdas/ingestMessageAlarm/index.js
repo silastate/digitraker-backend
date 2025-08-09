@@ -6,7 +6,10 @@ AWS.config.update({ region: 'us-east-2' });
 
 const dynamo = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
 
-const TXID_WITH_COEF = ['2820042_1'];
+const dataparsersdk = require('./lib');
+const fxlib = require('./fxlib');
+
+const TXID_WITH_COEF = [];
 
 const cleanExtraAlarms = (alarmsOn) => {
   const allAlarmTypes = ['outRange', 'tamper', 'lowBattery', 'timeout'];
@@ -14,15 +17,11 @@ const cleanExtraAlarms = (alarmsOn) => {
   const alarmsToDelete = [];
 
   const allExtraDeleteRequest = allAlarmTypes.forEach((alarmType) => {
-    const alarmsOnOfAlarmType = alarmsOn.filter(
-      (a) => a.alarmType.S === alarmType
-    );
+    const alarmsOnOfAlarmType = alarmsOn.filter((a) => a.alarmType.S === alarmType);
     if (alarmsOnOfAlarmType.length > 1) {
       // keep the oldest one
       // add all others to the delete list
-      alarmsOnOfAlarmType.sort((a, b) =>
-        parseInt(a.alarmId.N, 10) > parseInt(b.alarmId.N, 10) ? 1 : -1
-      );
+      alarmsOnOfAlarmType.sort((a, b) => (parseInt(a.alarmId.N, 10) > parseInt(b.alarmId.N, 10) ? 1 : -1));
 
       const extraAlarmsToDelete = alarmsOnOfAlarmType.slice(1);
       alarmsToKeep.push(alarmsOnOfAlarmType[0]);
@@ -48,6 +47,52 @@ const cleanExtraAlarms = (alarmsOn) => {
   };
 };
 
+function resistanceToTempUltraLow_original(resistance, beta = 4700, R25 = 10000) {
+  /** 
+   * Convert thermistor resistance to temperature using the beta parameter equation 
+   * Adjusted for ultra-low temperature ranges (-70°F to -84°F) 
+   * Args: 
+   * resistance: Resistance in ohms 
+   * beta: Beta coefficient (increased for better low-temp accuracy) 
+   * R25: Resistance at 25°C 
+   * * Returns: 
+   * object: { celsius, fahrenheit } temperatures */
+  const T25 = 273.15 + 25;
+  // Calculate temperature in Kelvin 
+  const kelvin = 1 / ((1 / T25) + (1 / beta) * Math.log(resistance / R25));
+  // Convert to Celsius and Fahrenheit 
+  const celsius = kelvin - 273.15;
+  const fahrenheit = (celsius * 9 / 5) + 32;
+  return { celsius, fahrenheit };
+}
+
+
+function resistanceToTempUltraLow(resistance, beta = 4700, R25 = 10000) {
+  /** 
+   * Convert thermistor resistance to temperature using the beta parameter equation 
+   * Adjusted for ultra-low temperature ranges (-70°F to -84°F) 
+   * Args: 
+   * resistance: Resistance in ohms 
+   * beta: Beta coefficient (increased for better low-temp accuracy) 
+   * R25: Resistance at 25°C 
+   * * Returns: 
+   * object: { celsius, fahrenheit } temperatures */
+  let a = 1.46717e-3;
+  let B = 2.38452e-4;
+  let C = 0.000000100399;
+  resistance = (resistance * 500000) / (500000 - resistance);
+  console.log('Rprobe value:', resistance);
+
+  let b = B * Math.log(resistance);
+  let c = C * Math.pow(Math.log(resistance), 3);
+
+  const kelvin = 1 / (a + b + c);
+  // Convert to Celsius and Fahrenheit 
+  const celsius = kelvin - 273.15;
+  const fahrenheit = (celsius * 9 / 5) + 32;
+  return { celsius, fahrenheit };
+}
+
 exports.handler = async (event) => {
   let decode = Buffer.from(event.data, 'base64').toString('ascii');
   if (decode === '[]') return JSON.stringify('{}', null, 2);
@@ -65,21 +110,48 @@ exports.handler = async (event) => {
 
   console.log('[######### INPUT ##########]', JSON.stringify(input, null, 2));
 
-  let readingArray;
+  //let readingArray;
+  let deviceType= '';
+  let readingArray = [];
   let pressure = false;
+  let newPressure = false;
 
   if ('data' in input.message.payload) {
     readingArray = input.message.payload.data;
   } else if ('channel' in input.message.payload) {
     readingArray = input.message.payload.channel;
     pressure = true;
+    newPressure = false;
+  } else if ('serialData' in input.message.payload) {
+    //console.log('input:', input);
+    //readingArray = input.message.payload.channel;
+    const parsedDataResp = fxlib.parseData(input.message.payload.serialData)
+    console.log("parsedDataResp--------> ", parsedDataResp, input.txid);
+    
+    deviceType = parsedDataResp.deviceType;
+    readingArray[0] = parsedDataResp.channel1;
+    readingArray[1] = parsedDataResp.channel2;
+    console.log("readingArray: ", readingArray);
+    console.log("deviceType: ", deviceType);
+    pressure = true;
+    newPressure = true;
   }
+
 
   // console.log(JSON.stringify(input, null, 2))
 
   await Promise.all(
     readingArray.map(async (item, index) => {
-      const txid = input.txid.concat('_', index.toString());
+
+      let txid = input.txid.concat('_', index.toString());
+      //New FX100 implementation
+      if (deviceType=='FX100') {
+        txid = input.txid.concat('_', (index+4).toString());
+        if (item=="Missing Probe"){
+          console.log('Missing Probe', txid, item);
+          return;
+        }
+      }
       let alarmMessages = [];
       let deleteMessages = [];
 
@@ -93,7 +165,9 @@ exports.handler = async (event) => {
 
       // fetch info for this txid check range and set alarm
       const txidInfo = await dynamo.query(infoQueryParams).promise();
-
+      console.log('SENSOR deleted txid', txidInfo.Items[0].txid);
+      console.log('SENSOR deleted', txidInfo.Items[0].deleted);
+      console.log('SENSOR deleted 1', txidInfo.Items[0]);
       if (txidInfo.Items[0].deleted === undefined) {
         console.log('SENSOR INFO', txidInfo.Items[0]);
 
@@ -115,34 +189,28 @@ exports.handler = async (event) => {
 
       const cleanedAlarmMessages = await cleanExtraAlarms(txidAlarms.Items);
 
-      deleteMessages = [
-        ...cleanedAlarmMessages.alarmsToDelete,
-        ...deleteMessages,
-      ];
+      deleteMessages = [...cleanedAlarmMessages.alarmsToDelete, ...deleteMessages];
 
       const cleanAlarms = cleanedAlarmMessages.alarmsToKeep;
 
-      console.log(
-        'cleanAlarmMessages',
-        JSON.stringify(cleanedAlarmMessages, null, 2)
-      );
+      console.log('cleanAlarmMessages', JSON.stringify(cleanedAlarmMessages, null, 2));
 
       let outRange = false;
       let battery = false;
       let tamper = false;
-
+      let Unprocessitem = item;
       // adjust units for comparison
       const info = txidInfo.Items[0];
 
+    
+      //New FX100 implementation
+      if (deviceType=='FX100') {
+        //Don't do anything
+        console.log('FX100 deviceType', txid, item);
+      }
       if (TXID_WITH_COEF.includes(txid)) {
-        console.log(
-          'TXID_WITH_COEF',
-          txid,
-          JSON.stringify(info),
-          'ANTES',
-          item
-        );
-        const coef = info.coef ? info.coef.N : '0';
+        console.log('TXID_WITH_COEF', txid, JSON.stringify(info), 'ANTES', item);
+        const coef = info.coef ? info.coef.N : "0";
         item += parseFloat(coef);
       }
 
@@ -155,7 +223,7 @@ exports.handler = async (event) => {
         case '%':
           break;
         case 'WC':
-          if (pressure && item !== -9999) {
+          if ((pressure && !newPressure) && item !== -9999) {
             const coef = parseFloat(info.coef.N);
             item = 0.015625 * (item - 4) + coef; // positive equation
             // item = 0.015625 * (item - 4); // positive equation
@@ -168,27 +236,54 @@ exports.handler = async (event) => {
         default:
           console.log(`${txid} doesnt have unit configuration`);
       }
+      let ultraTxids = ['4643665_1', '4345080_1', '3959378_1', '3958810_1', '3957966_1', '3956362_1', '3958769_1', '4344126_1'];
+
+      if (ultraTxids.includes(txid)) {
+        console.log('resistance Calcuation begins for txid', txid);
+        let temp = resistanceToTempUltraLow(Unprocessitem);
+        console.log('resistance Calcuation result', temp.celsius, temp.fahrenheit);
+        item = info.unit.S == 'C' ? temp.celsius : temp.fahrenheit;
+        console.log(
+          "resistance Calcuation", txid,
+          parseFloat(info.rangeMax.N),
+          parseFloat(info.rangeMin.N),
+          item,
+          Unprocessitem
+        );
+      }
+
+   
 
       if (txid === '1832402_1') {
         item += -9;
       }
 
+      console.log(
+        "RangeCalculationAfter -->", txid,
+        parseFloat(info.rangeMax.N),
+        parseFloat(info.rangeMin.N),
+        item,
+        Unprocessitem,
+        JSON.stringify(info, null, 2)
+      );
       // out of range alarm - compare value with ranges
-      if (
-        item > parseFloat(info.rangeMax.N) ||
-        item < parseFloat(info.rangeMin.N)
-      ) {
-        // console.log("outRange")
+      if (item > parseFloat(info.rangeMax.N) || item < parseFloat(info.rangeMin.N)) {
+        console.log("outRange")
         outRange = true;
       }
       // low battery alarm
-      if (input.message.payload.status.lowBattery === true) {
+      if (newPressure) {
+        const parsedDataResp = dataparsersdk.parseData(input.message.payload.serialData)
+        console.log("isBatteryAlert parsedDataResp--------> ", parsedDataResp);
+        battery = parsedDataResp.isBatteryAlert;
+        console.log("isBatteryAlert--------> ", battery);
+      } else if (input.message.payload.status.lowBattery === true) {
         // console.log("BATTERY")
         battery = true;
       }
 
       // tamper alarm
-      if (input.message.payload.status.tamper === true) {
+      if (!newPressure && input.message.payload.status.tamper === true) {
         // console.log("TAMPER")
         tamper = true;
       }
@@ -212,7 +307,7 @@ exports.handler = async (event) => {
         },
       };
 
-      // console.log(txidAlarms)
+      console.log("txidAlarms---->", txidAlarms)
 
       let containsOutRange = false;
       let containsTamper = false;
@@ -223,37 +318,32 @@ exports.handler = async (event) => {
       let tamperHasEscalated = false;
       let timeoutHasEscalated = false;
 
+      console.log("txidAlarms Count---->", txidAlarms.Count)
+
       if (txidAlarms.Count !== 0) {
-        containsOutRange =
-          cleanAlarms.filter((a) => a.alarmType.S === 'outRange').length > 0;
-        containsTamper =
-          cleanAlarms.filter((a) => a.alarmType.S === 'tamper').length > 0;
-        containsBattery =
-          cleanAlarms.filter((a) => a.alarmType.S === 'lowBattery').length > 0;
-        containsTimeout =
-          cleanAlarms.filter((a) => a.alarmType.S === 'timeout').length > 0;
+        containsOutRange = cleanAlarms.filter((a) => a.alarmType.S === 'outRange').length > 0;
+        containsTamper = cleanAlarms.filter((a) => a.alarmType.S === 'tamper').length > 0;
+        containsBattery = cleanAlarms.filter((a) => a.alarmType.S === 'lowBattery').length > 0;
+        containsTimeout = cleanAlarms.filter((a) => a.alarmType.S === 'timeout').length > 0;
+
+        console.log("txidAlarms containsOutRange---->", containsOutRange)
 
         if (containsOutRange) {
-          outRangeHasEscalated =
-            cleanAlarms.filter((a) => a.alarmType.S === 'outRange')[0]
-              .escalation.N !== '0';
+          outRangeHasEscalated = cleanAlarms.filter((a) => a.alarmType.S === 'outRange')[0].escalation.N !== '0';
         }
         if (containsBattery) {
-          batteryHasEscalated =
-            cleanAlarms.filter((a) => a.alarmType.S === 'lowBattery')[0]
-              .escalation.N !== '0';
+          batteryHasEscalated = cleanAlarms.filter((a) => a.alarmType.S === 'lowBattery')[0].escalation.N !== '0';
         }
         if (containsTamper) {
-          tamperHasEscalated =
-            cleanAlarms.filter((a) => a.alarmType.S === 'tamper')[0].escalation
-              .N !== '0';
+          tamperHasEscalated = cleanAlarms.filter((a) => a.alarmType.S === 'tamper')[0].escalation.N !== '0';
         }
         if (containsTimeout) {
-          timeoutHasEscalated =
-            cleanAlarms.filter((a) => a.alarmType.S === 'timeout')[0].escalation
-              .N !== '0';
+          timeoutHasEscalated = cleanAlarms.filter((a) => a.alarmType.S === 'timeout')[0].escalation.N !== '0';
         }
       }
+      console.log("txidAlarms containsOutRange---->", containsOutRange)
+      console.log("txidAlarms containsTimeout---->", containsTimeout)
+      console.log("txidAlarms containsBattery---->", containsBattery)
 
       if (outRange && !containsOutRange) {
         // if is outofrange but it wasnt before
@@ -269,7 +359,6 @@ exports.handler = async (event) => {
           TableName: 'Sensors',
           Key: {
             txid: { S: txid },
-            createdAt: { N: '0' },
           },
           ExpressionAttributeNames: {
             '#alarm': 'alarmOn',
@@ -294,9 +383,7 @@ exports.handler = async (event) => {
       }
       // if it was outofrange but is no more
       else if (!outRange && containsOutRange && !outRangeHasEscalated) {
-        const messageArray = cleanAlarms.filter(
-          (a) => a.alarmType.S === 'outRange'
-        );
+        const messageArray = cleanAlarms.filter((a) => a.alarmType.S === 'outRange');
 
         const deleteOutRangeMessages = messageArray.map((alarm) => ({
           DeleteRequest: {
@@ -377,9 +464,7 @@ exports.handler = async (event) => {
         // closedBy=Digitraker
         // closedAt= Date.now().toString()
 
-        const messageArray = cleanAlarms.filter(
-          (a) => a.alarmType.S === 'lowBattery'
-        );
+        const messageArray = cleanAlarms.filter((a) => a.alarmType.S === 'lowBattery');
 
         const batteryMessage = {
           PutRequest: {
@@ -464,9 +549,7 @@ exports.handler = async (event) => {
         // closedBy=Digitraker
         // closedAt= Date.now().toString()
 
-        const messageArray = cleanAlarms.filter(
-          (a) => a.alarmType.S === 'lowBattery'
-        );
+        const messageArray = cleanAlarms.filter((a) => a.alarmType.S === 'lowBattery');
 
         const tamperMessage = {
           PutRequest: {
@@ -515,9 +598,7 @@ exports.handler = async (event) => {
         // alarmOn=false
         // closedAt= Date.now().toString()
 
-        const messageArray = cleanAlarms.find(
-          (a) => a.alarmType.S === 'timeout'
-        );
+        const messageArray = cleanAlarms.find((a) => a.alarmType.S === 'timeout');
 
         const timeoutMessage = {
           PutRequest: {
@@ -569,7 +650,8 @@ exports.handler = async (event) => {
         },
       };
 
-      // console.log("[#########ALARM MESSAGES#######]", JSON.stringify(params, null, 2))
+      console.log("[#########ALARM MESSAGES#######]", JSON.stringify(params, null, 2))
+      console.log("[#########ALARM MESSAGES#######] requestMessages.length ---->", requestMessages.length)
 
       if (requestMessages.length > 0) {
         console.log('Adding a new ALARM...');
@@ -585,6 +667,6 @@ exports.handler = async (event) => {
           .promise();
       }
       console.log('No messages written', txid);
-    })
+    }),
   );
 };
